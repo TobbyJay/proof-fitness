@@ -7,6 +7,14 @@ const requiredFiles = [
   'src/main.js',
   'src/app.js',
   'src/run-phase.js',
+  'src/db/database.js',
+  'src/db/schema.js',
+  'src/db/migrations.js',
+  'src/db/transactions.js',
+  'src/state/createEmptyProductionState.js',
+  'src/state/applicationBootstrap.js',
+  'src/state/hydrateState.js',
+  'src/state/persistenceCoordinator.js',
   'src/styles.css',
   'src/domain/exercises/exerciseCatalog.js',
   'src/domain/programmes/programmeCatalog.js',
@@ -58,6 +66,10 @@ const lean = await readFile(resolve(root, 'src/domain/programmes/leanAthleticPro
 const fallback = await readFile(resolve(root, 'src/domain/programmes/threeDayFallback.js'), 'utf8');
 const exercises = await readFile(resolve(root, 'src/domain/exercises/exerciseCatalog.js'), 'utf8');
 const snapshot = await readFile(resolve(root, 'src/domain/workouts/createWorkoutSnapshot.js'), 'utf8');
+const emptyState = await readFile(resolve(root, 'src/state/createEmptyProductionState.js'), 'utf8');
+const schema = await readFile(resolve(root, 'src/db/schema.js'), 'utf8');
+const transactions = await readFile(resolve(root, 'src/db/transactions.js'), 'utf8');
+const serviceWorker = await readFile(resolve(root, 'public/sw.js'), 'utf8');
 
 if (/Weeks? 1.?[–-]8|Week 8/i.test(`${app}\n${html}`)) throw new Error('The active app still presents the obsolete eight-week Foundation.');
 for (const id of ['foundation-a','foundation-b','foundation-c']) if (!foundation.includes(`id: '${id}'`)) throw new Error(`Missing ${id}.`);
@@ -67,5 +79,16 @@ if (!exercises.includes("id:'barbell-curl'")) throw new Error('Barbell curl is n
 if (!app.includes('createWorkoutSnapshot') || !snapshot.includes('deepFreeze')) throw new Error('Immutable active-workout snapshots are absent.');
 if (!app.includes('nextRequiredWorkout')) throw new Error('The active app does not use programme rotation.');
 if (!lean.includes('optionalE') || !fallback.includes('threeDayFallback')) throw new Error('Lean Athletic optional or fallback programming is missing.');
+for (const label of ['Populated demo','0.4-demo','export-demo','import-demo','Preview recovery flow','Fake 12-day streak']) {
+  if (`${app}\n${html}`.toLowerCase().includes(label.toLowerCase())) throw new Error(`Production still contains demo label: ${label}`);
+}
+for (const store of ['appMeta','userProfile','preferences','equipment','programmeStates','programmeTransitions','programmeReviews','scheduleOverrides','activeWorkoutSessions','workoutSessions','runSessions','mealChecks','dailyCheckIns','measurements','exerciseProgressionStates','auditEvents']) {
+  if (!schema.includes(store)) throw new Error(`IndexedDB schema is missing ${store}.`);
+}
+if (!emptyState.includes('streak:0') || !emptyState.includes('workouts:[]') || !emptyState.includes('measurements:[]')) throw new Error('Production defaults are not genuinely empty.');
+if (!app.includes('bootstrapApplication') || !app.includes('onboardingCompletedAt')) throw new Error('Asynchronous persistence bootstrap is missing.');
+if (!app.includes('workoutSnapshot') || !transactions.includes("product:'proof-fitness'")) throw new Error('Snapshot persistence or export identity is missing.');
+if (/deleteDatabase|indexedDB\.delete/i.test(serviceWorker)) throw new Error('The service worker must never delete IndexedDB.');
+if (!packageJson.dependencies?.dexie) throw new Error('Dexie must be a production dependency.');
 
 console.log('Proof Fitness project structure verified.');

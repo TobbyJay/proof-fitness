@@ -1,4 +1,4 @@
-const CACHE_NAME = 'proof-fitness-v0.2.0';
+const CACHE_NAME = 'proof-fitness-v1.0.0';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -44,11 +44,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      Promise.all(keys.filter((key) => key.startsWith('proof-fitness-') && key !== CACHE_NAME).map((key) => caches.delete(key)))
     )
   );
   self.clients.claim();
 });
+
+// Cache lifecycle is deliberately separate from IndexedDB. Application updates
+// replace stale shell/audio caches without touching durable user records.
 
 self.addEventListener('message', (event) => {
   if (event.data?.type !== 'CACHE_RUN_AUDIO') return;

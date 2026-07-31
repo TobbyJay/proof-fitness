@@ -6,34 +6,27 @@ import { getSubstitutionOptions } from './domain/exercises/substitutions.js';
 import { PULL_UP_RUNGS } from './domain/exercises/pullUpProgression.js';
 import { createProgrammeState } from './domain/programmes/createProgrammeState.js';
 import { applyFoundationExtension } from './domain/programmes/foundationProgramme.js';
-import { getWorkoutTemplate } from './domain/programmes/programmeCatalog.js';
+import { getWorkoutTemplate, PROGRAMME_VERSION } from './domain/programmes/programmeCatalog.js';
 import { nextRequiredWorkout } from './domain/scheduling/workoutRotation.js';
 import { createWorkoutSnapshot } from './domain/workouts/createWorkoutSnapshot.js';
 import { estimateWorkoutDuration } from './domain/workouts/estimateWorkoutDuration.js';
 import { foundationReadinessReview } from './domain/reviews/foundationReadinessReview.js';
 import { applyProgrammeTransition, createProgrammeTransition } from './domain/programmes/programmeTransitions.js';
 import { recordCalibration } from './domain/progression/calibration.js';
+import { bootstrapApplication } from './state/applicationBootstrap.js';
+import { persistence } from './state/persistenceCoordinator.js';
+import { localDate, newId } from './db/transactions.js';
+import { calculateDerived } from './state/hydrateState.js';
 
-const RUN_MODE_STORAGE_KEY = 'proof-fitness.run-guidance-mode';
-const RUN_CACHE_NAME = 'proof-fitness-v0.2.0';
+const RUN_CACHE_NAME = 'proof-fitness-v1.0.0';
 const RUN_AUDIO = {
   opus: '/audio/coach/starter-run-coach.opus',
   mp3: '/audio/coach/starter-run-coach.mp3',
   chimes: '/audio/chimes/starter-run-chimes.opus'
 };
 
-function savedRunMode() {
-  try {
-    const value = localStorage.getItem(RUN_MODE_STORAGE_KEY);
-    return ['voice', 'chimes', 'visual'].includes(value) ? value : 'voice';
-  } catch (_) {
-    return 'voice';
-  }
-}
-
-function saveRunMode(value) {
-  try { localStorage.setItem(RUN_MODE_STORAGE_KEY, value); } catch (_) {}
-}
+function savedRunMode() { return 'voice'; }
+function saveRunMode(value) { return persistence.savePreference({ runGuidanceMode:value }).catch(showPersistenceError); }
 
 const meals = [
   {
@@ -99,6 +92,19 @@ const state = {
   weight: null,
   completedToday: false,
   completedWorkoutSnapshots: [],
+  profile: null,
+  appMeta: null,
+  measurements: [],
+  workoutRecords: [],
+  runHistory: [],
+  mealChecks: [],
+  checkIns: [],
+  progression: [],
+  reviews: [],
+  transitions: [],
+  derived: { streak:0,completedWorkouts:0,completedRuns:0,mealChecks:0 },
+  persistenceReady: false,
+  persistenceError: null,
   workout: {
     active: false,
     finished: false,
@@ -118,15 +124,17 @@ const state = {
     forceFullForm: false,
     pullupEnabledAtStart: null,
     snapshot: null,
-    supersededSnapshots: []
+    supersededSnapshots: [],
+    sessionId: null,
+    persistenceMessage: ''
   },
   readiness: { energy: 'Good', sleep: 'Okay', soreness: 'Low' },
   formSeen: {},
   pullupLevel: 2,
   equipment: { ...DEFAULT_EQUIPMENT, plates: { ...DEFAULT_EQUIPMENT.plates } },
   programme: createProgrammeState(),
-  foundationEvidence: { completedRequiredWorkouts:0, plannedRequiredWorkouts:12, incompleteCalibrationAreas:6, formConfidence:'not-yet', unresolvedPainOrDiscomfort:false, energy:'good', sleep:'okay', recoveryBetweenSessions:'normal', fourDayScheduleFeasible:false },
   run: {
+    id: null,
     active: false,
     step: 'overview',
     completed: false,
@@ -208,10 +216,10 @@ function pullupStatusLabel() {
 
 const onboardingState = {
   step: 0,
-  name: 'Tobby',
-  weight: 69.8,
-  target: 74,
-  waist: 84,
+  name: '',
+  weight: '',
+  target: '',
+  waist: '',
   days: ['Monday','Wednesday','Friday'],
   optionalDay: 'Saturday',
   barWeight: '',
@@ -224,14 +232,14 @@ const onboardingSteps = [
   {
     eyebrow: 'Goal', title: 'Start with the plan that matters now.',
     copy: 'Set the lean-gain target and begin. Food exclusions, notifications and waist tracking appear later when they are relevant.',
-    render: () => `<div class="onboarding-fields two-column"><label>Name<input id="obName" value="${onboardingState.name}"></label><label>Current weight (kg)<input id="obWeight" type="number" step="0.1" value="${onboardingState.weight}"></label><label>Target weight (kg)<input id="obTarget" type="number" step="0.1" value="${onboardingState.target}"></label><label>Primary goal<select><option selected>Build muscle with controlled waist</option></select></label></div>`
+    render: () => `<div class="onboarding-fields two-column"><label>Name<input id="obName" value="${onboardingState.name}"></label><label>Current weight (kg, optional)<input id="obWeight" type="number" step="0.1" value="${onboardingState.weight}"></label><label>Target weight (kg, optional)<input id="obTarget" type="number" step="0.1" value="${onboardingState.target}"></label><label>Waist (cm, optional)<input id="obWaist" type="number" step="0.1" value="${onboardingState.waist}"></label></div>`
   },
   {
     eyebrow: 'Schedule', title: 'Choose three days you can defend.', copy: 'The workout sequence remains A → B → C even when a day moves.',
     render: () => `<div class="option-grid">${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day => `<button class="option-tile ${onboardingState.days.includes(day) ? 'selected' : ''}" data-ob-day="${day}"><strong>${day}</strong><small>${onboardingState.days.includes(day) ? 'Required workout day' : 'Available'}</small></button>`).join('')}</div><div class="onboarding-fields"><label>Optional workout day<select id="obOptional">${['Saturday','Sunday','None'].map(x => `<option ${x===onboardingState.optionalDay?'selected':''}>${x}</option>`).join('')}</select></label></div>`
   },
   {
-    eyebrow: 'Equipment', title: 'Make every load unambiguous.', copy: 'Your exact plate inventory is seeded. Empty implement weights are optional; plate-only loads remain explicit until entered.',
+    eyebrow: 'Equipment', title: 'Make every load unambiguous.', copy: 'Your plate inventory is ready to confirm. Empty implement weights are optional; plate-only loads remain explicit until entered.',
     render: () => `<div class="onboarding-summary"><div><span>0.5 kg plates</span><strong>6</strong></div><div><span>1.25 kg plates</span><strong>6</strong></div><div><span>2.5 kg plates</span><strong>4</strong></div><div><span>5 kg plates</span><strong>4</strong></div><div><span>Total removable plates</span><strong>40.5 kg</strong></div><div><span>Pull-up bar</span><strong>${pullupStatusLabels[onboardingState.pullupBarStatus]}</strong></div></div><div class="equipment-status-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="option-tile ${onboardingState.pullupBarStatus === value ? 'selected' : ''}" data-ob-pullup-status="${value}"><strong>${label}</strong><small>${value === 'installed-available' ? 'Requires a one-time safety confirmation' : value === 'owned-not-installed' ? 'Current default · pullovers remain scheduled' : value === 'temporarily-unavailable' ? 'Pull-up progression pauses without resetting' : 'Pull-up work stays locked'}</small></button>`).join('')}</div><div class="pullup-safety"><strong>Conditional programming</strong><p>Pull-up workouts appear only after the bar is marked installed and the safety check is confirmed. Until then, Workout C uses a dumbbell pullover with separate history.</p></div><div class="onboarding-fields two-column"><label>Empty barbell weight (optional)<input id="obBar" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.barWeight}"></label><label>One empty dumbbell handle (optional)<input id="obDumbbell" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.dumbbellWeight}"></label></div>`
   },
   {
@@ -254,21 +262,26 @@ function renderOnboarding() {
   const step = onboardingSteps[onboardingState.step];
   document.getElementById('onboardingStepLabel').textContent = `STEP ${onboardingState.step + 1} OF ${onboardingSteps.length}`;
   document.getElementById('onboardingProgressBar').style.width = `${((onboardingState.step + 1) / onboardingSteps.length) * 100}%`;
-  content.innerHTML = `<div class="onboarding-step"><span class="eyebrow">${step.eyebrow}</span><h2>${step.title}</h2><p>${step.copy}</p>${step.render()}<div class="onboarding-actions"><button class="onboarding-skip" id="skipOnboarding">Skip to populated demo</button><div class="onboarding-actions-right">${onboardingState.step > 0 ? '<button class="button button-ghost" id="onboardingBack">Back</button>' : ''}<button class="button button-primary" id="onboardingNext">${onboardingState.step === onboardingSteps.length - 1 ? 'Begin Week 1' : 'Continue'}</button></div></div></div>`;
-  document.getElementById('skipOnboarding').addEventListener('click', () => layer.classList.add('completed'));
-  document.getElementById('onboardingNext').addEventListener('click', () => {
+  content.innerHTML = `<div class="onboarding-step"><span class="eyebrow">${step.eyebrow}</span><h2>${step.title}</h2><p>${step.copy}</p>${step.render()}<p class="persistence-inline-error" id="onboardingPersistenceError"></p><div class="onboarding-actions"><span class="eyebrow">Saved locally after each step</span><div class="onboarding-actions-right">${onboardingState.step > 0 ? '<button class="button button-ghost" id="onboardingBack">Back</button>' : ''}<button class="button button-primary" id="onboardingNext">${onboardingState.step === onboardingSteps.length - 1 ? 'Begin Week 1' : 'Continue'}</button></div></div></div>`;
+  document.getElementById('onboardingNext').addEventListener('click', async () => {
     captureOnboardingStep();
-    if (onboardingState.step < onboardingSteps.length - 1) { onboardingState.step += 1; renderOnboarding(); }
+    if (!onboardingState.name.trim()) { document.getElementById('onboardingPersistenceError').textContent='Enter your name to continue.'; return; }
+    if (onboardingState.step < onboardingSteps.length - 1) {
+      const nextStep=onboardingState.step+1;
+      try { await persistence.saveOnboardingDraft(serialiseOnboarding(nextStep)); onboardingState.step=nextStep; renderOnboarding(); }
+      catch (error) { document.getElementById('onboardingPersistenceError').textContent=`Could not save this step: ${error.message}`; }
+    }
     else {
-      state.equipment.pullUpBarStatus = onboardingState.pullupBarStatus;
-      state.equipment.pullUpSafetyConfirmed = false;
-      layer.classList.add('completed');
-      updateLongTermUI();
-      showToast(state.equipment.pullUpBarStatus === 'installed-available' ? 'Week 1 is ready. Confirm pull-up bar safety before activation.' : 'Week 1 is ready. Dumbbell pullovers remain scheduled until the pull-up bar is activated.');
-      if (state.equipment.pullUpBarStatus === 'installed-available') setTimeout(pullupSetup, 180);
+      try {
+        const equipment={ ...state.equipment,pullUpBarStatus:onboardingState.pullupBarStatus,pullUpSafetyConfirmed:false,emptyBarbellKg:Number(onboardingState.barWeight)||null,emptyDumbbellHandleKg:Number(onboardingState.dumbbellWeight)||null };
+        const measurements=[]; if(Number(onboardingState.weight)>0) measurements.push({type:'weight',value:Number(onboardingState.weight),localDate:localDate()}); if(Number(onboardingState.waist)>0) measurements.push({type:'waist',value:Number(onboardingState.waist),localDate:localDate()});
+        state.programme=await persistence.completeOnboarding({ profile:{name:onboardingState.name.trim(),goal:'build-muscle-controlled-waist',targetWeightKg:Number(onboardingState.target)||null,trainingDays:[...onboardingState.days],optionalDay:onboardingState.optionalDay},preferences:{theme:state.theme,runGuidanceMode:state.run.audioMode,notificationsEnabled:false},equipment,measurements,optionalConditioningEnabled:onboardingState.optionalDay!=='None' });
+        state.equipment=equipment; state.appMeta=(await persistence.repos.appMeta.get('app')); state.profile=await persistence.repos.profile.get('profile'); state.measurements=measurements;
+        layer.classList.add('completed'); updateAll(); showToast('Week 1 is ready. Your progress is stored on this device.');
+      } catch(error) { document.getElementById('onboardingPersistenceError').textContent=`Could not complete onboarding: ${error.message}. Your entries remain here; retry when ready.`; }
     }
   });
-  document.getElementById('onboardingBack')?.addEventListener('click', () => { captureOnboardingStep(); onboardingState.step -= 1; renderOnboarding(); });
+  document.getElementById('onboardingBack')?.addEventListener('click', async () => { captureOnboardingStep(); const next=Math.max(0,onboardingState.step-1); try{await persistence.saveOnboardingDraft(serialiseOnboarding(next));onboardingState.step=next;renderOnboarding();}catch(error){document.getElementById('onboardingPersistenceError').textContent=error.message;} });
   content.querySelectorAll('[data-ob-day]').forEach(button => button.addEventListener('click', () => {
     const day = button.dataset.obDay;
     const index = onboardingState.days.indexOf(day);
@@ -285,14 +298,16 @@ function renderOnboarding() {
 }
 
 function captureOnboardingStep() {
-  const name = document.getElementById('obName'); if (name) onboardingState.name = name.value.trim() || 'Tobby';
-  const weight = document.getElementById('obWeight'); if (weight) onboardingState.weight = Number(weight.value) || 69.8;
-  const target = document.getElementById('obTarget'); if (target) onboardingState.target = Number(target.value) || 74;
-  const waist = document.getElementById('obWaist'); if (waist) onboardingState.waist = Number(waist.value) || 84;
+  const name = document.getElementById('obName'); if (name) onboardingState.name = name.value.trim();
+  const weight = document.getElementById('obWeight'); if (weight) onboardingState.weight = weight.value;
+  const target = document.getElementById('obTarget'); if (target) onboardingState.target = target.value;
+  const waist = document.getElementById('obWaist'); if (waist) onboardingState.waist = waist.value;
   const optional = document.getElementById('obOptional'); if (optional) onboardingState.optionalDay = optional.value;
   const bar = document.getElementById('obBar'); if (bar) onboardingState.barWeight = bar.value;
   const dumbbell = document.getElementById('obDumbbell'); if (dumbbell) onboardingState.dumbbellWeight = dumbbell.value;
 }
+
+function serialiseOnboarding(step=onboardingState.step) { return { ...onboardingState,step,days:[...onboardingState.days],exclusions:[...onboardingState.exclusions] }; }
 
 function showToast(message) {
   toast.textContent = message;
@@ -305,6 +320,7 @@ function setTheme(theme) {
   state.theme = theme;
   app.dataset.theme = theme;
   document.documentElement.style.background = theme === 'dark' ? '#11140f' : '#f4f0e7';
+  if (state.persistenceReady) persistence.savePreference({ theme }).catch(error => showPersistenceError(error));
 }
 
 function toggleTheme() { setTheme(state.theme === 'dark' ? 'light' : 'dark'); }
@@ -375,15 +391,17 @@ function renderMeals() {
   container.querySelectorAll('[data-meal-action]').forEach(button => button.addEventListener('click', () => handleMealAction(button.dataset.mealId, button.dataset.mealAction)));
 }
 
-function handleMealAction(mealId, action) {
+async function handleMealAction(mealId, action) {
   const meal = meals.find(item => item.id === mealId);
   if (action === 'planned') {
+    try { const record=await persistence.saveMeal(mealId,'planned',{name:meal.planned}); state.mealChecks=upsertById(state.mealChecks,record); } catch(error){ return showPersistenceError(error); }
     state.meals[mealId] = { type: 'planned', name: meal.planned };
     updateAll();
     showToast(`${meal.slot} recorded.`);
     return;
   }
   if (action === 'missed') {
+    try { const record=await persistence.saveMeal(mealId,'missed',{name:'Missed'}); state.mealChecks=upsertById(state.mealChecks,record); } catch(error){ return showPersistenceError(error); }
     state.meals[mealId] = { type: 'missed', name: 'Missed' };
     updateAll();
     showToast(`${meal.slot} recorded as missed—no lecture attached.`);
@@ -396,8 +414,9 @@ function handleMealAction(mealId, action) {
       ${meal.alternatives.map((alt,index) => `<button class="choice-button" data-alt-index="${index}"><strong>${alt.name}</strong><span>${alt.note}</span></button>`).join('')}
     </div>
   `);
-  modalContent.querySelectorAll('[data-alt-index]').forEach(button => button.addEventListener('click', () => {
+  modalContent.querySelectorAll('[data-alt-index]').forEach(button => button.addEventListener('click', async () => {
     const alt = meal.alternatives[Number(button.dataset.altIndex)];
+    try { const record=await persistence.saveMeal(mealId,'approved-alternative',{name:alt.name}); state.mealChecks=upsertById(state.mealChecks,record); } catch(error){ return showPersistenceError(error); }
     state.meals[mealId] = { type: 'alternative', name: alt.name };
     closeModal(); updateAll(); showToast(`${meal.slot} alternative recorded.`);
   }));
@@ -420,8 +439,13 @@ function updateDailyStatus() {
   document.getElementById('weightState').textContent = state.weight ? 'Done' : 'Add';
   document.getElementById('workoutState').textContent = state.workout.active ? 'Resume' : state.completedToday ? 'Done' : 'Start';
   document.getElementById('progressMealAdherence').textContent = `${mealAdherence()}%`;
-  document.getElementById('dataMealChecks').textContent = mealCount;
-  document.getElementById('dataMeasurements').textContent = state.weight ? 1 : 0;
+  document.getElementById('dataMealChecks').textContent = state.derived?.mealChecks||0;
+  document.getElementById('dataMeasurements').textContent = state.measurements.length;
+  const streak=document.getElementById('streakLabel'); if(streak) streak.textContent=`${state.derived?.streak||0} day${state.derived?.streak===1?'':'s'}`;
+  const sessions=document.getElementById('dataSessionCount'); if(sessions) sessions.textContent=(state.derived.completedWorkouts+state.derived.completedRuns);
+  const workoutCount=document.getElementById('progressWorkoutCount'); if(workoutCount) workoutCount.textContent=state.derived.completedWorkouts;
+  const workoutLabel=document.getElementById('progressWorkoutLabel'); if(workoutLabel) workoutLabel.textContent=state.derived.completedWorkouts?'Saved sessions':'Not started';
+  renderProofLine();
 
   document.querySelectorAll('.action-row').forEach(row => row.classList.remove('completed'));
   const rows = document.querySelectorAll('.action-row');
@@ -429,6 +453,17 @@ function updateDailyStatus() {
   if (mealCount === meals.length) rows[1]?.classList.add('completed');
   if (state.feeling) rows[2]?.classList.add('completed');
   if (state.weight) rows[3]?.classList.add('completed');
+}
+
+function renderProofLine() {
+  const line=document.querySelector('.proof-line'); if(!line) return;
+  const trainingDays=new Set(state.profile?.trainingDays||[]); const today=new Date(); const monday=new Date(today); const mondayOffset=(today.getDay()+6)%7; monday.setDate(today.getDate()-mondayOffset);
+  const workouts=new Set(state.workoutRecords.filter(item=>item.status==='completed').map(item=>item.localDate));
+  const checks=new Set(state.checkIns.filter(item=>item.feeling).map(item=>item.localDate)); const mealCounts=new Map();
+  for(const item of state.mealChecks.filter(item=>item.status!=='unchecked')) mealCounts.set(item.localDate,(mealCounts.get(item.localDate)||0)+1);
+  line.innerHTML=Array.from({length:7},(_,offset)=>{const date=new Date(monday);date.setDate(monday.getDate()+offset);const key=localDate(date);const day=date.toLocaleDateString('en-US',{weekday:'long'});const required=trainingDays.has(day);const qualifies=(mealCounts.get(key)||0)>=4&&checks.has(key)&&(!required||workouts.has(key));const future=date>today;const current=key===localDate(today);return `<div class="proof-day ${qualifies?'done':future?'future':current?'current':required?'':'rest'}"><span>${day[0]}</span><strong>${qualifies?'✓':current?'•':'—'}</strong><small>${required?'Workout':current?'Now':'Rest'}</small></div>`;}).join('');
+  const title=document.getElementById('proof-line-title'); if(title) title.textContent=state.derived.streak?`${state.derived.streak} day${state.derived.streak===1?'':'s'} of proof`:'Start with today';
+  const status=document.getElementById('proofLineStatus'); if(status) status.textContent=state.derived.streak?'On track':'No qualifying days yet';
 }
 
 function openFeeling() {
@@ -439,27 +474,132 @@ function openFeeling() {
       ${['Great','Good','Okay','Tired','Poor'].map(value => `<button class="choice-button" data-feeling="${value}"><strong>${value}</strong><span>${value === 'Poor' ? 'Recovery guidance may appear' : 'Record and continue'}</span></button>`).join('')}
     </div>
   `);
-  modalContent.querySelectorAll('[data-feeling]').forEach(button => button.addEventListener('click', () => {
+  modalContent.querySelectorAll('[data-feeling]').forEach(button => button.addEventListener('click', async () => {
+    try { const record=await persistence.saveCheckIn({ feeling:button.dataset.feeling,energy:state.readiness.energy,sleep:state.readiness.sleep,soreness:state.readiness.soreness }); state.checkIns=upsertById(state.checkIns,record); } catch(error){ return showPersistenceError(error); }
     state.feeling = button.dataset.feeling; closeModal(); updateAll(); showToast(`Feeling recorded: ${state.feeling}.`);
   }));
 }
 
 function logWeight() {
   openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Measurement</span><h2 id="modalTitle">Record morning weight</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <p>The weekly average matters more than one measurement.</p>
-    <div class="modal-form"><label>Weight in kilograms<input id="weightInput" type="number" min="30" max="250" step="0.1" value="69.8"></label></div>
-    <div class="modal-actions"><button class="button button-ghost" data-action="close-modal">Cancel</button><button class="button button-primary" id="saveWeight">Save weight</button></div>
+    <div class="modal-heading"><div><span class="eyebrow">Measurement</span><h2 id="modalTitle">Record a measurement</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
+    <p>Trends appear only after enough real entries exist.</p>
+    <div class="modal-form"><label>Measurement<select id="measurementType"><option value="weight">Weight (kg)</option><option value="waist">Waist (cm)</option></select></label><label>Value<input id="weightInput" type="number" min="20" max="300" step="0.1" placeholder="Enter value"></label></div>
+    <div class="modal-actions"><button class="button button-ghost" data-action="close-modal">Cancel</button><button class="button button-primary" id="saveWeight">Save measurement</button></div>
   `);
   modalContent.querySelectorAll('[data-action="close-modal"]').forEach(x => x.addEventListener('click', closeModal));
-  document.getElementById('saveWeight').addEventListener('click', () => {
+  document.getElementById('saveWeight').addEventListener('click', async () => {
     const value = Number(document.getElementById('weightInput').value);
-    if (!Number.isFinite(value) || value < 30) return showToast('Enter a valid weight.');
-    state.weight = value; closeModal(); updateAll(); showToast(`${value.toFixed(1)} kg recorded.`);
+    const type=document.getElementById('measurementType').value;
+    if (!Number.isFinite(value) || value < 20) return showToast('Enter a valid measurement.');
+    try { const record=await persistence.saveMeasurement(type,value); state.measurements=[...(state.measurements||[]),record]; } catch(error){ return showPersistenceError(error); }
+    if(type==='weight') state.weight=value; closeModal(); updateAll(); showToast(`${type==='weight'?`${value.toFixed(1)} kg`:`${value.toFixed(1)} cm waist`} recorded.`);
   });
 }
 
+function showPersistenceError(error) { state.persistenceError=error; showToast(`Could not save: ${error?.message||error}. Try again.`); }
+
+function upsertById(items,record) { return [...items.filter(item=>item.id!==record.id),record]; }
+
+function recalculateDerived() {
+  state.derived=calculateDerived({
+    profile:state.profile,workouts:state.workoutRecords,runs:state.runHistory,
+    mealChecks:state.mealChecks,checkIns:state.checkIns
+  });
+}
+
+function applyHydratedState(hydrated) {
+  state.appMeta=hydrated.appMeta;
+  state.profile=hydrated.profile;
+  state.programme=hydrated.programme||state.programme;
+  state.equipment=hydrated.equipment||state.equipment;
+  state.measurements=hydrated.measurements||[];
+  state.workoutRecords=hydrated.workouts||[];
+  state.runHistory=hydrated.runs||[];
+  state.mealChecks=hydrated.mealChecks||[];
+  state.checkIns=hydrated.checkIns||[];
+  state.progression=hydrated.progression||[];
+  state.reviews=hydrated.reviews||[];
+  state.transitions=hydrated.transitions||[];
+  state.derived=hydrated.derived||state.derived;
+  state.completedWorkoutSnapshots=state.workoutRecords.filter(item=>item.status==='completed').map(item=>item.workoutSnapshot);
+  const today=localDate();
+  state.completedToday=state.workoutRecords.some(item=>item.status==='completed'&&item.localDate===today);
+  state.meals={};
+  for(const item of state.mealChecks.filter(item=>item.localDate===today&&item.status!=='unchecked')) {
+    state.meals[item.mealId]={type:item.status==='approved-alternative'?'alternative':item.status,name:item.name};
+  }
+  const todayCheck=state.checkIns.find(item=>item.localDate===today);
+  state.feeling=todayCheck?.feeling||null;
+  if(todayCheck) state.readiness={energy:todayCheck.energy||'Good',sleep:todayCheck.sleep||'Okay',soreness:todayCheck.soreness||'Low'};
+  state.weight=state.measurements.findLast?.(item=>item.localDate===today&&item.type==='weight')?.value||null;
+  if(hydrated.preferences) {
+    state.theme=hydrated.preferences.theme||'dark';
+    state.run.audioMode=hydrated.preferences.runGuidanceMode||'voice';
+    state.settings.restSoundEnabled=hydrated.preferences.restSoundEnabled!==false;
+    state.settings.restTone=hydrated.preferences.restTone||state.settings.restTone;
+    state.settings.vibrationEnabled=hydrated.preferences.vibrationEnabled!==false;
+  }
+  if(hydrated.activeWorkout) restoreActiveWorkout(hydrated.activeWorkout);
+  const activeRun=state.runHistory.find(item=>item.status==='active'||item.status==='paused');
+  if(activeRun) restoreActiveRun(activeRun);
+}
+
+function restoreActiveWorkout(record) {
+  const pausedAt=record.pausedAt?new Date(record.pausedAt).getTime():Date.now();
+  const startedAt=new Date(record.startedAt).getTime();
+  Object.assign(state.workout,{
+    active:true,sessionId:record.id,snapshot:record.workoutSnapshot,step:record.step||'overview',
+    currentExercise:record.currentExerciseIndex||0,completedSets:record.completedSets||{},
+    calibration:record.calibration||{},substitutions:record.substitutions||{},readiness:record.readiness||state.readiness,
+    supersededSnapshots:record.supersededSnapshots||[],skippedSets:record.skippedSets||[],skippedExercises:record.skippedExercises||[],
+    warmup:new Set(record.warmup||[]),result:record.result||null,startedAt:null,
+    elapsedBeforePause:record.elapsedSeconds||Math.max(0,Math.floor((pausedAt-startedAt)/1000)),
+    restEndsAt:record.restDeadline?new Date(record.restDeadline).getTime():null
+  });
+  state.readiness={...state.readiness,...(record.readiness||{})};
+  if(state.workout.restEndsAt) {
+    state.workout.step='rest'; state.workout.restRemaining=Math.max(0,Math.ceil((state.workout.restEndsAt-Date.now())/1000));
+  }
+}
+
+function restoreActiveRun(record) {
+  Object.assign(state.run,{id:record.id,active:true,completed:false,step:'active',paused:true,
+    audioMode:record.guidanceMode||'voice',phaseIndex:record.currentPhaseIndex||0,
+    visualElapsedBeforePause:record.audioPositionSeconds||0});
+}
+
+function renderHistory() {
+  const list=document.getElementById('historyList'); if(!list) return;
+  const records=[...state.workoutRecords.filter(item=>['completed','partial'].includes(item.status)).map(item=>({
+    date:item.localDate,title:item.workoutNameSnapshot||item.workoutSnapshot?.workoutName||item.templateId,type:item.status==='partial'?'Partial strength':'Strength',detail:`${item.templateId} · ${item.status}`
+  })),...state.runHistory.filter(item=>item.status==='completed').map(item=>({date:item.localDate,title:starterRun.name,type:'Run–walk',detail:`${formatTime(Math.floor(item.audioPositionSeconds||RUN_TOTAL_SECONDS))} · ${item.guidanceMode||'voice'}`}))]
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  list.innerHTML=records.length?records.map(item=>`<article class="history-card"><div><span class="eyebrow">${item.type}</span><h2>${item.title}</h2><p>${item.detail}</p></div><time>${item.date}</time></article>`).join(''):'<section class="insight-banner"><h2>No activity yet.</h2><p>Completed workouts and runs will appear here after they are saved.</p></section>';
+  const count=document.getElementById('historyCount'); if(count) count.textContent=`${records.length} session${records.length===1?'':'s'}`;
+}
+
+function renderMeasurements() {
+  for(const type of ['weight','waist']) {
+    const values=state.measurements.filter(item=>item.type===type).sort((a,b)=>a.localDate.localeCompare(b.localDate));
+    const latest=values.at(-1);
+    const value=document.getElementById(type==='weight'?'progressWeight':'progressWaist');
+    const trend=document.getElementById(type==='weight'?'progressWeightTrend':'progressWaistTrend');
+    if(value) value.textContent=latest?`${Number(latest.value).toFixed(1)} ${type==='weight'?'kg':'cm'}`:'Not recorded';
+    if(trend) trend.textContent=values.length<3?'No trend yet':`${values.at(-1).value-values.at(0).value>=0?'+':''}${(values.at(-1).value-values.at(0).value).toFixed(1)} ${type==='weight'?'kg':'cm'} across ${values.length} entries`;
+  }
+}
+
+function renderProgressionEvidence() {
+  const evidence=state.progression.find(item=>item.exerciseId==='barbell-romanian-deadlift');
+  const status=document.getElementById('progressionStatus'); if(status) status.textContent=evidence?'Evidence saved':'Not started';
+  const load=document.getElementById('progressionCurrentLoad'); if(load) load.textContent=evidence?.currentWorkingLoad!=null?`${evidence.currentWorkingLoad} kg`:evidence?'Calibration recorded':'Not calibrated';
+  const copy=document.getElementById('progressionEvidenceCopy'); if(copy) copy.textContent=evidence?`Calibration: ${evidence.calibrationStatus}. Successful appearances: ${evidence.successfulAppearances||0}.`:'No performance evidence recorded.';
+  const next=document.getElementById('progressionNextLoad'); if(next) next.textContent=evidence?.pendingRecommendation?.loadKg?`${evidence.pendingRecommendation.loadKg} kg`:'Not eligible';
+}
+
 function updateAll() {
+  recalculateDerived();
   renderTodayMeals();
   renderMeals();
   updateDailyStatus();
@@ -467,6 +607,9 @@ function updateAll() {
   updateActiveRunStrip();
   updateLongTermUI();
   updateProgrammeUI();
+  renderHistory();
+  renderMeasurements();
+  renderProgressionEvidence();
 }
 
 function updateProgrammeUI() {
@@ -492,11 +635,17 @@ async function startWorkout() {
       scheduleMode:state.programme.scheduleMode, equipment:state.equipment, pullUpRung:state.pullupLevel
     });
   }
+  try {
+    if (!state.workout.sessionId) {
+      const record=await persistence.startWorkout(state.workout.snapshot,{ readiness:{...state.readiness} }); state.workout.sessionId=record.id;
+    } else await persistence.updateWorkout(state.workout.sessionId,{status:'active',pausedAt:null});
+  } catch(error) { showPersistenceError(error); return; }
   state.workout.active = true;
   if (state.workout.pullupEnabledAtStart === null) state.workout.pullupEnabledAtStart = pullupEnabledForFutureWorkouts();
   if (!state.workout.startedAt) state.workout.startedAt = Date.now();
   if (!state.workout.step) state.workout.step = 'overview';
   startWorkoutTicker();
+  if(state.workout.step==='rest'&&state.workout.restEndsAt){clearInterval(restTicker);restTicker=setInterval(updateRestTimer,250);updateRestTimer();}
   renderWorkout();
   showScreen('workout');
 }
@@ -648,19 +797,21 @@ function openCalibrationSheet() {
 function openSwapExercise() {
   const exercise = currentWorkoutExercise();
   openModal(`<div class="modal-heading"><div><span class="eyebrow">Exercise substitution</span><h2 id="modalTitle">Swap ${exercise.name}?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Alternatives preserve the movement purpose as closely as this home setup allows.</p><div class="choice-list">${(exercise.substitutes || []).map((sub,index) => `<button class="choice-button" data-substitute-index="${index}"><strong>${sub.name}</strong><span>${sub.note}</span></button>`).join('')}</div>`);
-  modalContent.querySelectorAll('[data-substitute-index]').forEach(button => button.addEventListener('click', () => {
+  modalContent.querySelectorAll('[data-substitute-index]').forEach(button => button.addEventListener('click', async () => {
     const sub = exercise.substitutes[Number(button.dataset.substituteIndex)];
     const sourceId = exercise.substitutionSourceExerciseId || exercise.id;
     const template = getWorkoutTemplate(state.workout.snapshot.templateId);
     const previous = state.workout.snapshot;
-    state.workout.supersededSnapshots.push(previous);
-    state.workout.substitutions[sourceId] = sub.id;
-    state.workout.snapshot = createWorkoutSnapshot({
+    const nextSubstitutions={...state.workout.substitutions,[sourceId]:sub.id};
+    const nextSnapshot = createWorkoutSnapshot({
       template, programmeVersion:previous.programmeVersion, programmePhase:previous.programmePhase,
       scheduleMode:previous.scheduleMode, equipment:previous.equipmentSnapshot,
-      pullUpRung:previous.pullUpAvailabilitySnapshot.rung, substitutions:state.workout.substitutions,
+      pullUpRung:previous.pullUpAvailabilitySnapshot.rung, substitutions:nextSubstitutions,
       createdAt:previous.createdAt
     });
+    const supersededSnapshots=[...state.workout.supersededSnapshots,previous];
+    try { await persistence.updateWorkout(state.workout.sessionId,{workoutSnapshot:nextSnapshot,exercisesSnapshot:nextSnapshot.exercises,substitutions:nextSubstitutions,supersededSnapshots}); } catch(error){return showPersistenceError(error);}
+    state.workout.supersededSnapshots=supersededSnapshots; state.workout.substitutions=nextSubstitutions; state.workout.snapshot=nextSnapshot;
     closeModal(); renderWorkout(); showToast(`${exercise.name} swapped to ${sub.name} with its own prescription and identity.`);
   }));
 }
@@ -698,8 +849,8 @@ function updateActiveWorkoutStrip() {
 function injectWeeklyCoach() {
   if (document.getElementById('weeklyCoach')) return;
   const metrics = document.querySelector('[data-screen="progress"] .metric-strip');
-  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Build real evidence first.</h2><p>No programme-specific trend is inferred from the remaining prototype display data. Recommendations will use persisted sessions in the next production-hardening phase.</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence rules</button></section>`);
-  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">No supported trend yet</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Domain sessions</span><strong>${state.completedWorkoutSnapshots.length}</strong></div><div><span>Calibration exercises</span><strong>${Object.keys(state.programme.calibrationByExerciseId).length}</strong></div><div><span>Silent changes</span><strong>Never</strong></div></div><div class="conflict-card"><strong>Evidence remains exercise-specific</strong><p>A future durable weekly review will use actual session, meal, readiness, and measurement records. Prototype cards are not treated as programme evidence.</p></div>`));
+  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Build real evidence first.</h2><p>Recommendations stay unavailable until persisted sessions, check-ins, meals, and measurements support a conclusion.</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence</button></section>`);
+  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">${state.workoutRecords.length?'Saved evidence':'No supported trend yet'}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Completed workouts</span><strong>${state.derived.completedWorkouts}</strong></div><div><span>Calibration exercises</span><strong>${Object.keys(state.programme.calibrationByExerciseId).length}</strong></div><div><span>Measurements</span><strong>${state.measurements.length}</strong></div></div><div class="conflict-card"><strong>Evidence remains exercise-specific</strong><p>No load or schedule change is made silently. More consistent records are needed before a weekly recommendation is shown.</p></div>`));
 }
 
 function renderWorkout() {
@@ -756,8 +907,9 @@ function renderWorkout() {
 
   if (state.workout.step === 'receipt') {
     const setCount = activeWorkoutExercises().reduce((sum, exercise) => sum + exercise.sets, 0);
-    const upcoming = nextRequiredWorkout({ scheduleMode:state.programme.scheduleMode, activeTemplateSetId:state.programme.activeTemplateSetId, lastCompletedTemplateId:snapshot.templateId });
-    stage.innerHTML = `<div class="workout-step">${base}<div class="receipt"><div class="receipt-header"><div><span class="eyebrow">Workout receipt</span><h2>${snapshot.workoutName}</h2><p>Programme Week ${state.programme.currentProgrammeWeek} · ${snapshot.programmePhase}</p></div><div class="receipt-mark">✓</div></div><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Duration</span><strong>${formatTime(workoutElapsedSeconds())}</strong></div><div><span>Exercises</span><strong>${snapshot.exercises.length} / ${snapshot.exercises.length}</strong></div><div><span>Sets</span><strong>${setCount} / ${setCount}</strong></div><div><span>Session</span><strong>${state.workout.result}</strong></div><div><span>Evidence</span><strong>Exercise IDs preserved</strong></div><div><span>Template</span><strong>${snapshot.templateId} v${snapshot.templateVersion}</strong></div><div><span>Next</span><strong>${getWorkoutTemplate(upcoming.templateId).name}</strong></div></div><div class="receipt-dash"></div><button class="button button-primary full-width" data-action="finish-receipt">Return to Today</button></div></div>`;
+    const completedSetCount=Object.values(state.workout.completedSets).reduce((sum,sets)=>sum+sets.length,0);
+    const upcoming = nextRequiredWorkout({ scheduleMode:state.programme.scheduleMode, activeTemplateSetId:state.programme.activeTemplateSetId, lastCompletedTemplateId:state.workout.result==='Stopped early'?state.programme.lastCompletedRequiredTemplateId:snapshot.templateId });
+    stage.innerHTML = `<div class="workout-step">${base}<div class="receipt"><div class="receipt-header"><div><span class="eyebrow">Workout receipt</span><h2>${snapshot.workoutName}</h2><p>Programme Week ${state.programme.currentProgrammeWeek} · ${snapshot.programmePhase}</p></div><div class="receipt-mark">✓</div></div><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Duration</span><strong>${formatTime(workoutElapsedSeconds())}</strong></div><div><span>Exercises</span><strong>${snapshot.exercises.length}</strong></div><div><span>Sets completed</span><strong>${completedSetCount} / ${setCount}</strong></div><div><span>Session</span><strong>${state.workout.result}</strong></div><div><span>Evidence</span><strong>Exercise IDs preserved</strong></div><div><span>Template</span><strong>${snapshot.templateId} v${snapshot.templateVersion}</strong></div><div><span>Next</span><strong>${getWorkoutTemplate(upcoming.templateId).name}</strong></div></div><div class="receipt-dash"></div><button class="button button-primary full-width" data-action="finish-receipt">Return to Today</button></div></div>`;
   }
 
   bindWorkoutActions();
@@ -777,9 +929,13 @@ function renderExercise(stage, base) {
   stage.innerHTML = `<div class="workout-step">${base}<div class="exercise-header"><div><span class="eyebrow">Exercise ${state.workout.currentExercise + 1} of ${activeWorkoutExercises().length}${exercise.optional ? ' · optional' : ''}</span><h1 class="exercise-title">${displayName}</h1><p>${exercise.sets} × ${displayTarget}</p>${pullupRung ? `<span class="exercise-mode-badge">Rung ${pullupRung.id} of 4</span>` : ''}${substituted ? `<div class="substitution-note">Resolved from ${getExercise(substituted).name}; ${exercise.name} keeps its own prescription and history identity.</div>` : ''}</div><div class="exercise-load"><strong>${displayLoad}</strong><span>${exercise.qualifier}</span></div></div><div class="exercise-context-strip"><div><small>Previous evidence</small><strong>Not started</strong><span>Keyed by ${exercise.id}</span></div><div class="today"><small>Today</small><strong>${displayLoad} · Set ${currentSet}/${exercise.sets}</strong><span>${displayTarget}</span></div><div><small>Progression</small><strong>Earn two controlled appearances</strong><span>Never applied silently</span></div></div><div class="dark-load-panel"><span class="eyebrow">${configurationLabel}</span><h3>${exercise.plates}</h3><p>${exercise.cue}</p></div><div class="set-grid">${Array.from({length:exercise.sets},(_,i) => `<button class="set-button ${completed.includes(i+1) ? 'complete' : currentSet === i+1 ? 'current' : ''}" data-set="${i+1}">${completed.includes(i+1) ? '✓' : String(i+1).padStart(2,'0')}</button>`).join('')}</div><button class="current-set-action" data-complete-current="true">Complete set ${currentSet}</button><div class="exercise-footer-actions"><button class="text-button light" data-action="review-form">Review form</button>${pullupRung ? '<button class="text-button light" data-action="choose-pullup-level">Change future rung</button>' : '<button class="text-button light" data-action="swap-exercise">Swap exercise</button>'}${exercise.optional ? '<button class="text-button light" data-action="skip-optional-exercise">Omit optional exercise</button>' : '<button class="text-button light" data-action="skip-set">Skip current set</button>'}</div></div>`;
 }
 
-function skipOptionalExercise() {
+async function skipOptionalExercise() {
   const exercise = currentWorkoutExercise();
   if (!exercise?.optional) return;
+  const skippedExercises=[...(state.workout.skippedExercises||[]),exercise.id];
+  const hasNext=state.workout.currentExercise<activeWorkoutExercises().length-1; const currentExerciseIndex=hasNext?state.workout.currentExercise+1:state.workout.currentExercise; const step=hasNext?'form':'result';
+  try { await persistence.updateWorkout(state.workout.sessionId,{skippedExercises,currentExerciseIndex,step}); } catch(error){return showPersistenceError(error);}
+  state.workout.skippedExercises=skippedExercises;
   if (state.workout.currentExercise < activeWorkoutExercises().length - 1) {
     state.workout.currentExercise += 1; state.workout.step = 'form';
   } else state.workout.step = 'result';
@@ -792,20 +948,24 @@ async function completeCurrentSet() {
   const exercise = currentWorkoutExercise();
   const completed = state.workout.completedSets[exercise.id] || [];
   const nextSet = completed.length + 1;
-  if (!completed.includes(nextSet)) completed.push(nextSet);
-  state.workout.completedSets[exercise.id] = completed;
-  if (completed.length >= exercise.sets) {
+  const nextCompleted=completed.includes(nextSet)?completed:[...completed,nextSet];
+  const completedSets={...state.workout.completedSets,[exercise.id]:nextCompleted};
+  try { await persistence.updateWorkout(state.workout.sessionId,{completedSets,currentExerciseIndex:state.workout.currentExercise,currentSetIndex:nextCompleted.length}); } catch(error){return showPersistenceError(error);}
+  state.workout.completedSets=completedSets;
+  if (nextCompleted.length >= exercise.sets) {
     renderWorkout();
     openCalibrationSheet();
   } else {
-    startRest(exercise.restSeconds);
+    await startRest(exercise.restSeconds);
   }
 }
 
-function startRest(seconds) {
+async function startRest(seconds) {
+  const deadline=Date.now()+seconds*1000;
+  try { await persistence.updateWorkout(state.workout.sessionId,{restDeadline:new Date(deadline).toISOString(),status:'active'}); } catch(error){return showPersistenceError(error);}
   state.workout.restRemaining = seconds;
   state.workout.restTotal = seconds;
-  state.workout.restEndsAt = Date.now() + seconds * 1000;
+  state.workout.restEndsAt = deadline;
   state.workout.restWarningPlayed = false;
   state.workout.step = 'rest';
   clearInterval(restTicker);
@@ -827,13 +987,16 @@ function updateRestTimer() {
   }
 }
 
-function addRestSeconds(seconds) {
-  state.workout.restEndsAt = (state.workout.restEndsAt || Date.now()) + seconds * 1000;
+async function addRestSeconds(seconds) {
+  const deadline=(state.workout.restEndsAt || Date.now()) + seconds * 1000;
+  try { await persistence.updateWorkout(state.workout.sessionId,{restDeadline:new Date(deadline).toISOString()}); } catch(error){return showPersistenceError(error);}
+  state.workout.restEndsAt = deadline;
   state.workout.restTotal = (state.workout.restTotal || state.workout.restRemaining || 0) + seconds;
   updateRestTimer();
 }
 
-function endRest(notify = false) {
+async function endRest(notify = false) {
+  try { await persistence.updateWorkout(state.workout.sessionId,{restDeadline:null}); } catch(error){return showPersistenceError(error);}
   clearInterval(restTicker);
   restTicker = null;
   state.workout.restEndsAt = null;
@@ -850,9 +1013,16 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && state.workout.step === 'rest') updateRestTimer();
 });
 
-function handleCalibration(value) {
+async function handleCalibration(value) {
   const exercise = currentWorkoutExercise();
-  state.workout.calibration[exercise.id] = value;
+  const calibration={...state.workout.calibration,[exercise.id]:value};
+  const definition=getExercise(exercise.id); const existing=state.progression.find(item=>item.exerciseId===exercise.id&&item.exerciseVersion===definition.version);
+  const progression={...existing,exerciseId:exercise.id,exerciseVersion:definition.version,currentWorkingLoad:state.workout.snapshot.exercises.find(item=>item.exerciseId===exercise.id)?.selectedLoad??null,currentRepTarget:exercise.target,calibrationStatus:value,successfulAppearances:existing?.successfulAppearances||0,unsuccessfulAppearances:existing?.unsuccessfulAppearances||0,pendingRecommendation:existing?.pendingRecommendation||null,acceptedRecommendation:existing?.acceptedRecommendation||null,deferredRecommendation:existing?.deferredRecommendation||null,rejectedRecommendation:existing?.rejectedRecommendation||null};
+  const hasNext=state.workout.currentExercise<activeWorkoutExercises().length-1; const currentExerciseIndex=hasNext?state.workout.currentExercise+1:state.workout.currentExercise; const step=hasNext?'form':'result';
+  let saved;
+  try { saved=await persistence.updateWorkoutAndProgression(state.workout.sessionId,{calibration,currentExerciseIndex,step},progression); } catch(error){return showPersistenceError(error);}
+  state.progression=upsertById(state.progression,saved.evidence);
+  state.workout.calibration=calibration;
   if (state.programme.currentProgrammeWeek <= 2) {
     state.programme.calibrationByExerciseId = recordCalibration(state.programme.calibrationByExerciseId, {
       exerciseId:exercise.id, exerciseVersion:getExercise(exercise.id).version, response:value,
@@ -869,37 +1039,45 @@ function handleCalibration(value) {
 }
 
 function bindWorkoutActions() {
-  document.querySelectorAll('[data-readiness-key]').forEach(button => button.addEventListener('click', () => {
-    state.readiness[button.dataset.readinessKey] = button.dataset.readinessValue;
+  document.querySelectorAll('[data-readiness-key]').forEach(button => button.addEventListener('click', async () => {
+    const readiness={...state.readiness,[button.dataset.readinessKey]:button.dataset.readinessValue};
+    try { await persistence.updateWorkout(state.workout.sessionId,{readiness}); } catch(error){return showPersistenceError(error);}
+    state.readiness=readiness;
     renderWorkout();
   }));
-  document.querySelectorAll('[data-form-begin]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-form-begin]').forEach(button => button.addEventListener('click', async () => {
     const exercise = currentWorkoutExercise();
+    try { await persistence.updateWorkout(state.workout.sessionId,{step:'exercise'}); } catch(error){return showPersistenceError(error);}
     state.formSeen[exercise.id] = Math.max(1, state.formSeen[exercise.id] || 0);
     state.workout.forceFullForm = false;
     state.workout.step = 'exercise'; renderWorkout();
   }));
-  document.querySelectorAll('[data-form-remember]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-form-remember]').forEach(button => button.addEventListener('click', async () => {
+    try { await persistence.updateWorkout(state.workout.sessionId,{step:'exercise'}); } catch(error){return showPersistenceError(error);}
     state.workout.step = 'exercise'; renderWorkout();
   }));
-  document.querySelectorAll('[data-workout-next]').forEach(button => button.addEventListener('click', () => { if (!button.disabled) { state.workout.step = button.dataset.workoutNext; renderWorkout(); }}));
-  document.querySelectorAll('[data-warmup]').forEach(button => button.addEventListener('click', () => { const index = Number(button.dataset.warmup); state.workout.warmup.has(index) ? state.workout.warmup.delete(index) : state.workout.warmup.add(index); renderWorkout(); }));
+  document.querySelectorAll('[data-workout-next]').forEach(button => button.addEventListener('click', async () => { if (!button.disabled) { try{await persistence.updateWorkout(state.workout.sessionId,{step:button.dataset.workoutNext});}catch(error){return showPersistenceError(error);} state.workout.step = button.dataset.workoutNext; renderWorkout(); }}));
+  document.querySelectorAll('[data-warmup]').forEach(button => button.addEventListener('click', async () => { const index = Number(button.dataset.warmup); const warmup=new Set(state.workout.warmup); warmup.has(index) ? warmup.delete(index) : warmup.add(index); try{await persistence.updateWorkout(state.workout.sessionId,{warmup:[...warmup],step:'warmup'});}catch(error){return showPersistenceError(error);} state.workout.warmup=warmup; renderWorkout(); }));
   document.querySelectorAll('[data-complete-current]').forEach(button => button.addEventListener('click', completeCurrentSet));
-  document.querySelectorAll('[data-set]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-set]').forEach(button => button.addEventListener('click', async () => {
     const exercise = currentWorkoutExercise();
     const setNo = Number(button.dataset.set);
     const completed = state.workout.completedSets[exercise.id] || [];
-    if (completed.includes(setNo)) state.workout.completedSets[exercise.id] = completed.filter(x => x !== setNo);
-    else if (setNo === completed.length + 1) state.workout.completedSets[exercise.id] = [...completed, setNo];
+    let next=completed;
+    if (completed.includes(setNo)) next=completed.filter(x => x !== setNo);
+    else if (setNo === completed.length + 1) next=[...completed,setNo];
+    const completedSets={...state.workout.completedSets,[exercise.id]:next};
+    try{await persistence.updateWorkout(state.workout.sessionId,{completedSets,currentExerciseIndex:state.workout.currentExercise,currentSetIndex:next.length});}catch(error){return showPersistenceError(error);}
+    state.workout.completedSets=completedSets;
     renderWorkout();
   }));
   document.querySelectorAll('[data-rest-skip]').forEach(button => button.addEventListener('click', () => endRest(false)));
   document.querySelectorAll('[data-rest-add]').forEach(button => button.addEventListener('click', () => addRestSeconds(Number(button.dataset.restAdd))));
   document.querySelectorAll('[data-test-rest-alert]').forEach(button => button.addEventListener('click', async () => { state.settings.restSoundEnabled = true; await unlockRestAudio({ preview: true }); renderWorkout(); }));
-  document.querySelectorAll('[data-toggle-rest-sound]').forEach(button => button.addEventListener('click', async () => { state.settings.restSoundEnabled = !state.settings.restSoundEnabled; if (state.settings.restSoundEnabled) await unlockRestAudio(); renderWorkout(); }));
-  document.querySelectorAll('[data-rest-tone]').forEach(button => button.addEventListener('click', async () => { state.settings.restTone = button.dataset.restTone; state.settings.restSoundEnabled = true; await unlockRestAudio({ preview: true }); renderWorkout(); }));
+  document.querySelectorAll('[data-toggle-rest-sound]').forEach(button => button.addEventListener('click', async () => { const enabled=!state.settings.restSoundEnabled; try{await persistence.savePreference({restSoundEnabled:enabled});}catch(error){return showPersistenceError(error);} state.settings.restSoundEnabled = enabled; if (enabled) await unlockRestAudio(); renderWorkout(); }));
+  document.querySelectorAll('[data-rest-tone]').forEach(button => button.addEventListener('click', async () => { try{await persistence.savePreference({restTone:button.dataset.restTone,restSoundEnabled:true});}catch(error){return showPersistenceError(error);} state.settings.restTone = button.dataset.restTone; state.settings.restSoundEnabled = true; await unlockRestAudio({ preview: true }); renderWorkout(); }));
   document.querySelectorAll('[data-calibration]').forEach(button => button.addEventListener('click', () => handleCalibration(button.dataset.calibration)));
-  document.querySelectorAll('[data-session-result]').forEach(button => button.addEventListener('click', () => { state.workout.result = button.dataset.sessionResult; state.workout.step = 'receipt'; renderWorkout(); }));
+  document.querySelectorAll('[data-session-result]').forEach(button => button.addEventListener('click', async () => { try{await persistence.updateWorkout(state.workout.sessionId,{result:button.dataset.sessionResult,step:'receipt'});}catch(error){return showPersistenceError(error);} state.workout.result = button.dataset.sessionResult; state.workout.step = 'receipt'; renderWorkout(); }));
   document.querySelectorAll('[data-action="finish-receipt"]').forEach(button => button.addEventListener('click', finishWorkout));
   document.querySelectorAll('[data-action="minimise-workout"]').forEach(button => button.addEventListener('click', minimiseWorkout));
   document.querySelectorAll('[data-action="week-four-review"]').forEach(button => button.addEventListener('click', weekFourReview));
@@ -907,25 +1085,35 @@ function bindWorkoutActions() {
   document.querySelectorAll('[data-action="preview-run"]').forEach(button => button.addEventListener('click', openRunOverview));
   document.querySelectorAll('[data-action="pullup-setup"]').forEach(button => button.addEventListener('click', pullupSetup));
   document.querySelectorAll('[data-action="choose-pullup-level"]').forEach(button => button.addEventListener('click', choosePullupLevel));
-  document.querySelectorAll('[data-action="review-form"]').forEach(button => button.addEventListener('click', () => { state.workout.forceFullForm = true; state.workout.step = 'form'; renderWorkout(); }));
+  document.querySelectorAll('[data-action="review-form"]').forEach(button => button.addEventListener('click', async () => { try{await persistence.updateWorkout(state.workout.sessionId,{step:'form'});}catch(error){return showPersistenceError(error);} state.workout.forceFullForm = true; state.workout.step = 'form'; renderWorkout(); }));
   document.querySelectorAll('[data-action="swap-exercise"]').forEach(button => button.addEventListener('click', openSwapExercise));
   document.querySelectorAll('[data-action="choose-pullup-level"]').forEach(button => button.addEventListener('click', choosePullupLevel));
-  document.querySelectorAll('[data-action="skip-set"]').forEach(button => button.addEventListener('click', () => showToast('Prototype note: a skipped set would create partial progression evidence.')));
+  document.querySelectorAll('[data-action="skip-set"]').forEach(button => button.addEventListener('click', async () => {
+    const exercise=currentWorkoutExercise(); const setNo=(state.workout.completedSets[exercise.id]||[]).length+1;
+    const skippedSets=[...(state.workout.skippedSets||[]),{exerciseId:exercise.id,setNumber:setNo}];
+    try{await persistence.updateWorkout(state.workout.sessionId,{skippedSets});}catch(error){return showPersistenceError(error);}
+    state.workout.skippedSets=skippedSets; showToast(`Set ${setNo} recorded as skipped.`);
+  }));
   document.querySelectorAll('[data-action="skip-optional-exercise"]').forEach(button => button.addEventListener('click', skipOptionalExercise));
 }
 
-function finishWorkout() {
+async function finishWorkout() {
   const completedSnapshot = state.workout.snapshot;
-  state.programme.lastCompletedRequiredTemplateId = state.workout.snapshot.templateId;
-  if (state.programme.activePhase === 'foundation') {
-    state.foundationEvidence.completedRequiredWorkouts += 1;
-    state.programme.currentProgrammeWeek = Math.min(
-      4 + state.programme.foundationExtensionWeeks,
-      Math.floor(state.foundationEvidence.completedRequiredWorkouts / 3) + 1
+  const partial=state.workout.result==='Stopped early';
+  const nextProgramme=partial?{...state.programme}:{...state.programme,lastCompletedRequiredTemplateId:state.workout.snapshot.templateId};
+  if (!partial&&state.programme.activePhase === 'foundation') {
+    const completedRequiredWorkouts=state.workoutRecords.filter(item=>item.status==='completed'&&item.programmePhase==='foundation').length+1;
+    nextProgramme.currentProgrammeWeek = Math.min(
+      4 + nextProgramme.foundationExtensionWeeks,
+      Math.floor(completedRequiredWorkouts / 3) + 1
     );
   }
-  state.completedToday = true;
-  state.completedWorkoutSnapshots.push(completedSnapshot);
+  let completedRecord;
+  try { const active=await persistence.repos.activeWorkouts.get(state.workout.sessionId); completedRecord=await persistence.completeWorkout({...active,result:state.workout.result,completedSets:state.workout.completedSets,calibration:state.workout.calibration,elapsedSeconds:workoutElapsedSeconds()},nextProgramme,partial?'partial':'completed'); } catch(error){return showPersistenceError(error);}
+  state.programme=nextProgramme;
+  state.completedToday = !partial;
+  if(!partial) state.completedWorkoutSnapshots.push(completedSnapshot);
+  state.workoutRecords.push(completedRecord);
   state.workout.finished = false;
   state.workout.active = false;
   state.workout.elapsedBeforePause = workoutElapsedSeconds();
@@ -939,87 +1127,94 @@ function finishWorkout() {
   state.workout.result = null;
   state.workout.substitutions = {};
   state.workout.supersededSnapshots = [];
+  state.workout.sessionId = null;
   clearInterval(workoutTicker);
   showScreen('today');
   updateAll();
-  showToast('Workout logged automatically. Meals and feeling remain.');
+  showToast(partial?'Partial workout saved. Your required rotation is unchanged.':'Workout logged automatically. Meals and feeling remain.');
 }
 
-function minimiseWorkout() {
+async function minimiseWorkout() {
+  if(!state.workout.sessionId) { showScreen('today'); return; }
+  try { await persistence.updateWorkout(state.workout.sessionId,{status:'paused',pausedAt:new Date().toISOString(),step:state.workout.step,elapsedSeconds:workoutElapsedSeconds(),currentExerciseIndex:state.workout.currentExercise,completedSets:state.workout.completedSets}); } catch(error){return showPersistenceError(error);}
   state.workout.elapsedBeforePause = workoutElapsedSeconds();
   state.workout.startedAt = null;
   state.workout.active = true;
   clearInterval(workoutTicker);
   showScreen('today');
   updateAll();
-  showToast('Workout paused. Every completed set is safe in the prototype state.');
+  showToast('Workout paused. Every completed set is saved on this device.');
 }
 
-function recoveryDemo() {
+function openWorkoutRecovery() {
+  if(!state.workout.sessionId) return;
+  const completedSets=Object.values(state.workout.completedSets).reduce((sum,sets)=>sum+sets.length,0);
   openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Recovery flow</span><h2 id="modalTitle">Workout paused</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <p>Your first three exercises and nine completed sets are saved.</p>
-    <div class="import-summary"><div><span>Elapsed</span><strong>28:14</strong></div><div><span>Exercises</span><strong>3 / 6</strong></div><div><span>Sets</span><strong>9 saved</strong></div></div>
-    <div class="modal-actions"><button class="button button-ghost" id="partialDemo">End as partial</button><button class="button button-primary" id="resumeDemo">Resume workout</button></div>
+    <div class="modal-heading"><div><span class="eyebrow">Saved workout</span><h2 id="modalTitle">Continue ${state.workout.snapshot?.workoutName||'your workout'}?</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
+    <p>The exact workout snapshot, substitutions, equipment, completed sets, and rest deadline are stored locally.</p>
+    <div class="import-summary"><div><span>Elapsed</span><strong>${formatTime(state.workout.elapsedBeforePause)}</strong></div><div><span>Exercise</span><strong>${state.workout.currentExercise+1} / ${state.workout.snapshot?.exercises.length||0}</strong></div><div><span>Sets saved</span><strong>${completedSets}</strong></div></div>
+    <div class="modal-actions"><button class="button button-ghost" id="discardWorkout">Discard</button><button class="button button-secondary" id="partialWorkout">End as partial</button><button class="button button-primary" id="resumeWorkout">Resume workout</button></div>
   `);
-  document.getElementById('resumeDemo').addEventListener('click', () => { closeModal(); startWorkout(); });
-  document.getElementById('partialDemo').addEventListener('click', () => { closeModal(); showToast('Partial session receipt would be generated.'); });
+  document.getElementById('resumeWorkout').addEventListener('click', async () => { closeModal(); await startWorkout(); });
+  document.getElementById('partialWorkout').addEventListener('click', async () => {
+    try { const active=await persistence.repos.activeWorkouts.get(state.workout.sessionId); const record=await persistence.completeWorkout({...active,elapsedSeconds:state.workout.elapsedBeforePause},state.programme,'partial'); state.workoutRecords.push(record); clearRecoveredWorkout(); closeModal(); showScreen('today'); updateAll(); showToast('Partial workout saved.'); } catch(error){showPersistenceError(error);}
+  });
+  document.getElementById('discardWorkout').addEventListener('click', async () => {
+    if(!window.confirm('Discard this saved workout? Completed sets in this session will be permanently removed.')) return;
+    try { await persistence.discardWorkout(state.workout.sessionId); clearRecoveredWorkout(); closeModal(); showScreen('today'); updateAll(); showToast('Saved workout discarded.'); } catch(error){showPersistenceError(error);}
+  });
 }
 
-function progressionDemo() {
+function clearRecoveredWorkout() {
+  Object.assign(state.workout,{active:false,sessionId:null,snapshot:null,step:'overview',currentExercise:0,completedSets:{},calibration:{},substitutions:{},warmup:new Set(),elapsedBeforePause:0,startedAt:null,restEndsAt:null});
+}
+
+function showProgressionRules() {
+  const evidence=state.progression.find(item=>item.exerciseId==='barbell-romanian-deadlift');
   openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Progression rules</span><h2 id="modalTitle">Barbell Romanian deadlift · Not started</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <p>No performance evidence has been recorded for this stable exercise ID.</p>
-    <div class="import-summary"><div><span>Exercise ID</span><strong>barbell-romanian-deadlift</strong></div><div><span>Successful appearances</span><strong>0 / 2</strong></div><div><span>Automatic increase</span><strong>Never</strong></div></div>
+    <div class="modal-heading"><div><span class="eyebrow">Progression rules</span><h2 id="modalTitle">Barbell Romanian deadlift · ${evidence?'Evidence saved':'Not started'}</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
+    <p>${evidence?'This record is keyed to the stable exercise ID and version.':'No performance evidence has been recorded for this stable exercise ID.'}</p>
+    <div class="import-summary"><div><span>Exercise ID</span><strong>barbell-romanian-deadlift</strong></div><div><span>Successful appearances</span><strong>${evidence?.successfulAppearances||0} / 2</strong></div><div><span>Automatic increase</span><strong>Never</strong></div></div>
     <div class="conflict-card"><strong>Conservative double progression</strong><p>Build controlled repetitions in range, then receive an achievable plate recommendation. Accept, defer, or reject it; no load changes silently.</p></div>
     <div class="modal-actions"><button class="button button-primary" data-action="close-modal">Understood</button></div>
   `);
   modalContent.querySelectorAll('[data-action="close-modal"]').forEach(button => button.addEventListener('click', closeModal));
 }
-function tempoDemo() {
-  openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Alternative overload</span><h2 id="modalTitle">Use tempo instead of more weight</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <div class="choice-list"><button class="choice-button" data-tempo="3-sec"><strong>Three-second lowering</strong><span>Keep current load</span></button><button class="choice-button" data-tempo="pause"><strong>One-second bottom pause</strong><span>Keep current load</span></button><button class="choice-button" data-tempo="hold"><strong>Hold current prescription</strong><span>No change</span></button></div>
-  `);
-  modalContent.querySelectorAll('[data-tempo]').forEach(button => button.addEventListener('click', () => { closeModal(); showToast(`${button.querySelector('strong').textContent} selected.`); }));
-}
-
-function exportDemo() {
-  const payload = {
-    manifest: { format: 'proof-fitness-prototype', exportSchemaVersion: '0.4-demo', exportedAt: new Date().toISOString() },
-    meals: state.meals,
-    feeling: state.feeling,
-    weight: state.weight,
-    workout: { finished: state.workout.finished, result: state.workout.result },
-    programme: state.programme,
-    equipment: state.equipment,
-    pullupLevel: state.pullupLevel,
-    workoutSnapshot: state.workout.snapshot,
-    run: state.run,
-    note: 'Prototype export. Production records and integrity checks are not implemented.'
-  };
+async function exportData() {
+  let payload;
+  try { payload=await persistence.exportAll(PROGRAMME_VERSION); } catch(error){return showPersistenceError(error);}
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = url; link.download = 'proof-fitness-prototype-backup.json'; link.click();
+  link.href = url; link.download = `proof-fitness-backup-${localDate()}.json`; link.click();
   URL.revokeObjectURL(url);
-  showToast('Prototype JSON export created.');
+  const exportedAt=new Date().toISOString();
+  try{state.appMeta=await persistence.repos.appMeta.put({...state.appMeta,lastExportedAt:exportedAt});const label=document.getElementById('lastBackupText');if(label)label.textContent=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(exportedAt));}catch(error){showPersistenceError(error);}
+  showToast('JSON backup created. Keep it private.');
 }
 
-function importDemo() {
+function chooseImportFile() { document.getElementById('importFileInput')?.click(); }
+
+async function importDataFile(file) {
+  if(!file) return;
+  let payload;
+  try { payload=JSON.parse(await file.text()); } catch { return showPersistenceError(new Error('The selected file is not valid JSON.')); }
   openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Import preview</span><h2 id="modalTitle">Backup from Tobby’s phone</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <p>Exported 30 July 2026 · schema 0.1-demo</p>
-    <div class="import-summary"><div><span>Workouts</span><strong>18</strong></div><div><span>Meal checks</span><strong>76</strong></div><div><span>Measurements</span><strong>12</strong></div></div>
-    <div class="conflict-card"><strong>One measurement conflict</strong><p>31 July has 69.8 kg on this device and 70.0 kg in the backup.</p></div>
-    <div class="choice-list"><button class="choice-button" data-conflict="current"><strong>Keep current 69.8 kg</strong><span>Recommended</span></button><button class="choice-button" data-conflict="import"><strong>Use imported 70.0 kg</strong><span>Replace conflict</span></button><button class="choice-button" data-conflict="both"><strong>Keep both</strong><span>Both measurements remain visible</span></button></div>
-    <div class="modal-actions"><button class="button button-ghost" data-action="close-modal">Cancel</button><button class="button button-primary" id="completeImport" disabled>Merge records</button></div>
+    <div class="modal-heading"><div><span class="eyebrow">Restore backup</span><h2 id="modalTitle">Replace local Proof Fitness data?</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
+    <p>This is a replace import. It validates the backup first, then replaces all current records in one transaction.</p>
+    <div class="import-summary"><div><span>Exported</span><strong>${payload.manifest?.exportedAt||'Unknown'}</strong></div><div><span>Schema</span><strong>${payload.manifest?.schemaVersion??'Unknown'}</strong></div><div><span>Workouts</span><strong>${payload.workoutSessions?.length??'Unknown'}</strong></div></div>
+    <label class="confirm-reset"><input id="confirmImport" type="checkbox"> I understand my current local data will be replaced.</label>
+    <div class="modal-actions"><button class="button button-ghost" data-action="close-modal">Cancel</button><button class="button button-primary" id="completeImport" disabled>Replace and restore</button></div>
   `);
-  let chosen = false;
-  modalContent.querySelectorAll('[data-conflict]').forEach(button => button.addEventListener('click', () => {
-    chosen = true; modalContent.querySelectorAll('[data-conflict]').forEach(x => x.style.borderColor = ''); button.style.borderColor = '#c7f53a'; document.getElementById('completeImport').disabled = false;
-  }));
-  document.getElementById('completeImport').addEventListener('click', () => { if (!chosen) return; closeModal(); showToast('Import receipt: 106 records merged, streak recalculated.'); });
+  document.getElementById('confirmImport').addEventListener('change',event=>{document.getElementById('completeImport').disabled=!event.target.checked;});
+  document.getElementById('completeImport').addEventListener('click', async () => { try{await persistence.importReplace(payload);window.location.reload();}catch(error){showPersistenceError(error);} });
+}
+
+function resetData() {
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Destructive reset</span><h2 id="modalTitle">Reset all Proof Fitness data</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This permanently deletes onboarding, programme state, workouts, runs, meals, check-ins, measurements, progression, and reviews from this browser.</p><label class="modal-form">Type RESET to continue<input id="resetPhrase" autocomplete="off"></label><div class="modal-actions"><button class="button button-ghost" data-action="close-modal">Cancel</button><button class="button button-primary" id="completeReset" disabled>Delete all local data</button></div>`);
+  const input=document.getElementById('resetPhrase'); const button=document.getElementById('completeReset');
+  input.addEventListener('input',()=>{button.disabled=input.value!=='RESET';});
+  button.addEventListener('click',async()=>{try{await persistence.resetAll();if('caches' in window){for(const key of await caches.keys()) if(key.startsWith('proof-fitness-')) await caches.delete(key);}window.location.reload();}catch(error){showPersistenceError(error);}});
 }
 
 
@@ -1030,8 +1225,10 @@ function choosePullupLevel() {
     return;
   }
   openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up progression</span><h2 id="modalTitle">Choose the rung you can perform cleanly</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>The goal is not to force full pull-ups immediately. Start where the movement is controlled.</p><div class="pullup-ladder">${pullupLevels.map(level => `<button class="pullup-rung ${state.pullupLevel === level.id ? 'selected' : ''}" data-pullup-level="${level.id}"><span>${level.id}</span><span><strong>${level.name}</strong><small>${level.prescription} · ${level.note}</small></span><b>${state.pullupLevel === level.id ? 'CURRENT' : 'CHOOSE'}</b></button>`).join('')}</div><div class="pullup-safety"><strong>Safety before volume</strong><p>Confirm the bar is secure before every session. Stop if the frame, fasteners or bar shift. No kipping in this home programme.</p></div>`);
-  modalContent.querySelectorAll('[data-pullup-level]').forEach(button => button.addEventListener('click', () => {
-    state.pullupLevel = Number(button.dataset.pullupLevel);
+  modalContent.querySelectorAll('[data-pullup-level]').forEach(button => button.addEventListener('click', async () => {
+    const pullUpProgressionRung=Number(button.dataset.pullupLevel);
+    try{const saved=await persistence.saveEquipment({...state.equipment,pullUpProgressionRung});state.equipment=saved;}catch(error){return showPersistenceError(error);}
+    state.pullupLevel = pullUpProgressionRung;
     closeModal(); renderWorkout(); updateLongTermUI(); showToast(`${pullupLevels.find(x => x.id === state.pullupLevel).name} selected.`);
   }));
 }
@@ -1050,9 +1247,9 @@ function renderPullupSafetyConfirmation() {
   const refresh = () => { confirm.disabled = !boxes.every(box => box.checked); };
   boxes.forEach(box => box.addEventListener('change', refresh));
   document.getElementById('cancelPullupActivation')?.addEventListener('click', closeModal);
-  confirm?.addEventListener('click', () => {
-    state.equipment.pullUpBarStatus = 'installed-available';
-    state.equipment.pullUpSafetyConfirmed = true;
+  confirm?.addEventListener('click', async () => {
+    const now=new Date().toISOString(); const equipment={...state.equipment,pullUpBarStatus:'installed-available',pullUpSafetyConfirmed:true,pullUpSafetyConfirmation:{confirmed:true,confirmedAt:now,confirmationVersion:1}};
+    try{state.equipment=await persistence.saveEquipment(equipment);}catch(error){return showPersistenceError(error);}
     closeModal(); updateLongTermUI();
     showToast(state.workout.active ? 'Pull-ups enabled for the next Workout C. The current workout is unchanged.' : 'Pull-up progression enabled for your next Workout C.');
   });
@@ -1062,29 +1259,36 @@ function pullupSetup() {
   const current = pullupStatusLabel();
   const enabled = pullupEnabledForFutureWorkouts();
   openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up bar status</span><h2 id="modalTitle">Use what is actually available</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Pull-up programming appears only when the bar is installed, available and safety-confirmed. Otherwise, Workout C uses a dumbbell pullover.</p><div class="import-summary"><div><span>Current status</span><strong>${current}</strong></div><div><span>Workout C now</span><strong>${enabled ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div><div><span>Pull-up history</span><strong>${enabled ? 'Active' : 'Paused, not reset'}</strong></div></div><div class="equipment-status-grid modal-equipment-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="choice-button ${state.equipment.pullUpBarStatus === value ? 'selected-equipment-status' : ''}" data-pullup-status="${value}"><strong>${label}</strong><span>${value === 'installed-available' ? 'Complete safety confirmation to activate' : value === 'temporarily-unavailable' ? 'Use the fallback without resetting pull-up progress' : value === 'owned-not-installed' ? 'Default until installation' : 'Keep pull-up programming locked'}</span></button>`).join('')}</div><div class="choice-list"><a class="choice-button" href="https://www.youtube.com/watch?v=aNUSgyWRJYA" target="_blank" rel="noopener noreferrer"><strong>Beginner pull-up tutorial</strong><span>FitnessFAQs · YouTube ↗</span></a>${enabled ? '<button class="choice-button" data-action="choose-pullup-level"><strong>Change progression rung</strong><span>Start with what you can control</span></button>' : ''}</div>`);
-  modalContent.querySelectorAll('[data-pullup-status]').forEach(button => button.addEventListener('click', () => {
+  modalContent.querySelectorAll('[data-pullup-status]').forEach(button => button.addEventListener('click', async () => {
     const value = button.dataset.pullupStatus;
     if (value === 'installed-available') { closeModal(); renderPullupSafetyConfirmation(); return; }
-    state.equipment.pullUpBarStatus = value;
-    state.equipment.pullUpSafetyConfirmed = false;
+    try{state.equipment=await persistence.saveEquipment({...state.equipment,pullUpBarStatus:value,pullUpSafetyConfirmed:false,pullUpSafetyConfirmation:{confirmed:false,confirmedAt:null,confirmationVersion:1}});}catch(error){return showPersistenceError(error);}
     closeModal(); updateLongTermUI();
     showToast(value === 'temporarily-unavailable' ? 'Pull-up progress paused. Workout C will use dumbbell pullovers.' : `${pullupStatusLabels[value]}. Pull-up workouts remain locked.`);
   }));
   modalContent.querySelector('[data-action="choose-pullup-level"]')?.addEventListener('click', () => { closeModal(); choosePullupLevel(); });
 }
 
-function applyScheduleChoice(choice) {
+async function applyScheduleChoice(choice) {
   if (choice === state.programme.scheduleMode) { closeModal(); showToast('That schedule mode is already active.'); return; }
+  const currentReview=state.reviews.find(item=>item.id===state.programme.weekFourReviewId)||null;
   if (choice === 'extend-one-week' || choice === 'extend-two-weeks') {
     const reviewWithDecision = { ...state.programme.weekFourReview, userDecision:choice };
-    state.programme = applyFoundationExtension({ ...state.programme, weekFourReview:reviewWithDecision }, choice === 'extend-one-week' ? 1 : 2);
+    const programme = applyFoundationExtension({ ...state.programme, weekFourReview:reviewWithDecision }, choice === 'extend-one-week' ? 1 : 2);
+    const review=currentReview?{...currentReview,userDecision:choice}:null;
+    try{await persistence.saveProgrammeDecision(programme,{review});}catch(error){return showPersistenceError(error);}
+    state.programme=programme; if(review) state.reviews=upsertById(state.reviews,review);
     closeModal(); updateAll(); showToast(`Foundation extended by ${state.programme.foundationExtensionWeeks} week${state.programme.foundationExtensionWeeks === 1 ? '' : 's'}; A → B → C and all evidence continue.`); return;
   }
   const leavingFoundation = state.programme.activePhase === 'foundation';
-  const transition = createProgrammeTransition(state.programme, choice, leavingFoundation ? 'week-four-user-decision' : 'user-schedule-change');
-  state.programme = applyProgrammeTransition(state.programme, transition);
-  if (leavingFoundation) state.programme.currentProgrammeWeek = 5 + state.programme.foundationExtensionWeeks;
-  state.programme.weekFourReview = { ...state.programme.weekFourReview, userDecision:choice };
+  const domainTransition = createProgrammeTransition(state.programme, choice, leavingFoundation ? 'week-four-user-decision' : 'user-schedule-change');
+  const transition={id:newId('transition'),programmeStateId:state.programme.id,...domainTransition,reviewId:currentReview?.id||null,initiatedBy:'user',effectiveLocalDate:localDate()};
+  const programme = applyProgrammeTransition(state.programme, domainTransition);
+  if (leavingFoundation) programme.currentProgrammeWeek = 5 + programme.foundationExtensionWeeks;
+  programme.weekFourReview = { ...programme.weekFourReview, userDecision:choice };
+  const review=currentReview?{...currentReview,userDecision:choice}:null;
+  try{await persistence.saveProgrammeDecision(programme,{review,transition});}catch(error){return showPersistenceError(error);}
+  state.programme=programme; state.transitions.push(transition); if(review) state.reviews=upsertById(state.reviews,review);
   closeModal(); updateAll(); showToast(`${choice === 'lean-athletic-four-day' ? 'Four-day' : 'Permanent three-day'} Lean Athletic will begin with the next workout.`);
 }
 
@@ -1095,13 +1299,27 @@ function chooseSchedule() {
 }
 
 function weekFourReview() {
-  const review = foundationReadinessReview({ currentProgrammeWeek:state.programme.currentProgrammeWeek, ...state.foundationEvidence });
-  state.programme.weekFourReview = review;
-  if (!review.available) {
+  if (state.programme.currentProgrammeWeek < 4) {
     openModal(`<div class="modal-heading"><div><span class="eyebrow">Foundation readiness review</span><h2 id="modalTitle">Available at the end of Week 4</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This review is deterministic and uses completed required workouts, calibration coverage, reported confidence, discomfort, energy, sleep, soreness, recovery, and four-day feasibility.</p><div class="conflict-card"><strong>Current status: Week ${state.programme.currentProgrammeWeek}</strong><p>Four weeks is the default calibration period. Form practice continues throughout the programme.</p></div>`); return;
   }
+  const existing=state.reviews.find(item=>item.id===state.programme.weekFourReviewId);
+  if(existing) return showWeekFourReview(existing);
+  const completedRequiredWorkouts=state.workoutRecords.filter(item=>item.status==='completed'&&item.programmePhase==='foundation').length;
+  const calibrated=new Set(state.workoutRecords.flatMap(item=>Object.keys(item.calibration||{})));
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Foundation readiness review</span><h2 id="modalTitle">Complete the evidence window</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Session and calibration counts come from saved records. Add the personal evidence only you can report.</p><div class="import-summary"><div><span>Required sessions</span><strong>${completedRequiredWorkouts} / 12</strong></div><div><span>Calibrated exercises</span><strong>${calibrated.size}</strong></div></div><div class="modal-form"><label>Form confidence<select id="reviewConfidence"><option value="not-yet">Not yet confident</option><option value="adequate">Adequate</option><option value="high">High</option></select></label><label>Recovery between sessions<select id="reviewRecovery"><option value="normal">Normal</option><option value="temporarily-poor">Temporarily disrupted</option><option value="poor">Poor</option></select></label><label><input type="checkbox" id="reviewDiscomfort"> I have unresolved pain or discomfort</label><label><input type="checkbox" id="reviewFourDays"> Four required strength days are feasible</label></div><div class="modal-actions"><button class="button button-primary" id="completeReview">Calculate and save review</button></div>`);
+  document.getElementById('completeReview').addEventListener('click',async()=>{
+    const input={currentProgrammeWeek:state.programme.currentProgrammeWeek,completedRequiredWorkouts,plannedRequiredWorkouts:12,incompleteCalibrationAreas:Math.max(0,6-calibrated.size),formConfidence:document.getElementById('reviewConfidence').value,unresolvedPainOrDiscomfort:document.getElementById('reviewDiscomfort').checked,energy:String(state.readiness.energy).toLowerCase(),sleep:String(state.readiness.sleep).toLowerCase(),recoveryBetweenSessions:document.getElementById('reviewRecovery').value,temporaryRecoveryDisruption:document.getElementById('reviewRecovery').value==='temporarily-poor',fourDayScheduleFeasible:document.getElementById('reviewFourDays').checked};
+    const domainReview=foundationReadinessReview(input); const now=new Date().toISOString();
+    const record={id:newId('review'),programmeStateId:state.programme.id,reviewType:'foundation-readiness',weekNumber:4,evidenceWindowStart:state.programme.startedAt,evidenceWindowEnd:now,completedWorkoutCount:completedRequiredWorkouts,plannedWorkoutCount:12,calibrationSummary:{completed:calibrated.size,incompleteAreas:input.incompleteCalibrationAreas},formConfidenceSummary:input.formConfidence,discomfortSummary:input.unresolvedPainOrDiscomfort,recoverySummary:input.recoveryBetweenSessions,scheduleFeasibility:input.fourDayScheduleFeasible,recommendation:domainReview.recommendation,userDecision:null,reasons:domainReview.reasons,completedAt:now};
+    const programme={...state.programme,weekFourReviewId:record.id,weekFourReview:domainReview};
+    try{await persistence.saveProgrammeDecision(programme,{review:record});}catch(error){return showPersistenceError(error);}
+    state.programme=programme;state.reviews.push(record);showWeekFourReview(record);
+  });
+}
+
+function showWeekFourReview(review) {
   const labels = { ready:'Ready to choose the next schedule', 'extend-one-week':'Consider one more Foundation week', 'extend-two-weeks':'Consider two more Foundation weeks' };
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">System recommendation</span><h2 id="modalTitle">${labels[review.recommendation]}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This is not a medical assessment and does not claim to evaluate technique through the screen.</p><div class="import-summary"><div><span>Required sessions</span><strong>${review.completedRequiredWorkouts} / ${review.plannedRequiredWorkouts}</strong></div><div><span>Recommendation</span><strong>${review.recommendation}</strong></div><div><span>User decision</span><strong>Not chosen</strong></div></div><div class="conflict-card"><strong>Why</strong><p>${review.reasons.join(' ')}</p></div><div class="modal-actions"><button class="button button-ghost" data-review-choice="extend-two-weeks">Extend 2 weeks</button><button class="button button-secondary" data-review-choice="extend-one-week">Extend 1 week</button><button class="button button-primary" data-action="choose-schedule">Choose Lean Athletic schedule</button></div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">System recommendation</span><h2 id="modalTitle">${labels[review.recommendation]}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This is not a medical assessment and does not claim to evaluate technique through the screen.</p><div class="import-summary"><div><span>Required sessions</span><strong>${review.completedWorkoutCount} / ${review.plannedWorkoutCount}</strong></div><div><span>Recommendation</span><strong>${review.recommendation}</strong></div><div><span>User decision</span><strong>${review.userDecision||'Not chosen'}</strong></div></div><div class="conflict-card"><strong>Why</strong><p>${(review.reasons||[]).join(' ')}</p></div><div class="modal-actions"><button class="button button-ghost" data-review-choice="extend-two-weeks">Extend 2 weeks</button><button class="button button-secondary" data-review-choice="extend-one-week">Extend 1 week</button><button class="button button-primary" data-action="choose-schedule">Choose Lean Athletic schedule</button></div>`);
   modalContent.querySelectorAll('[data-review-choice]').forEach(button => button.addEventListener('click', () => applyScheduleChoice(button.dataset.reviewChoice)));
   modalContent.querySelector('[data-action="choose-schedule"]')?.addEventListener('click', () => { closeModal(); chooseSchedule(); });
 }
@@ -1119,7 +1337,7 @@ function updateLongTermUI() {
   const pathButton = document.getElementById('pullupPathButton');
   if (pathButton) pathButton.textContent = enabled ? 'Change current rung' : 'Set up pull-up bar';
   const path = document.querySelector('.pullup-mini-path');
-  if (path) path.classList.toggle('locked-path', !enabled);
+  if (path) { path.classList.toggle('locked-path', !enabled); [...path.children].forEach((item,index)=>{item.classList.toggle('done',enabled&&index+1<state.pullupLevel);item.classList.toggle('current',enabled&&index+1===state.pullupLevel);}); }
   const blockTwoStatus = document.getElementById('blockTwoStatus');
   if (blockTwoStatus) blockTwoStatus.textContent = state.programme.activePhase === 'lean-athletic' ? 'ACTIVE' : 'NEXT';
   updateProgrammeUI();
@@ -1279,6 +1497,8 @@ async function openRunOverview() {
   refreshRunOfflineStatus();
 }
 async function startRunSession() {
+  const id=state.run.id||newId('run'); const startedAt=new Date().toISOString();
+  try{const record=await persistence.saveRun({id,status:'active',startedAt,audioPositionSeconds:0,currentPhaseIndex:0,paused:false,guidanceMode:state.run.audioMode,lastPersistedAt:startedAt});state.runHistory=upsertById(state.runHistory,record);state.run.id=id;}catch(error){return showPersistenceError(error);}
   state.run.active = true; state.run.completed = false; state.run.step = 'active'; state.run.paused = false;
   prepareRunAudio();
   if (state.run.audioMode === 'visual') {
@@ -1306,6 +1526,7 @@ async function startRunSession() {
 function updateRunUi() {
   const time = currentRunTime();
   state.run.phaseIndex = runPhaseIndex(time);
+  if(state.run.id&&Date.now()-(state.run.lastPersistedAt||0)>=5000){state.run.lastPersistedAt=Date.now();persistRunProgress(state.run.paused?'paused':'active').catch(showPersistenceError);}
   const elapsed = document.getElementById('runElapsed'); if (elapsed) elapsed.textContent = formatTime(Math.floor(time));
   if ('mediaSession' in navigator && state.run.audioMode !== 'visual' && navigator.mediaSession.setPositionState) {
     try {
@@ -1327,13 +1548,16 @@ function seekRun(time) {
     state.run.visualElapsedBeforePause = bounded; state.run.visualStartedAt = state.run.paused ? null : Date.now();
   } else if (audio) audio.currentTime = bounded;
   updateRunUi();
+  persistRunProgress(state.run.paused?'paused':'active').catch(showPersistenceError);
 }
 function advanceRunPhase() {
   const index = runPhaseIndex();
   const next = runPhases[Math.min(runPhases.length - 1, index + 1)];
   seekRun(next.start);
 }
-function pauseRunAudio() {
+async function pauseRunAudio() {
+  const position=currentRunTime();
+  try{await persistRunProgress('paused',{audioPositionSeconds:position,paused:true});}catch(error){return showPersistenceError(error);}
   state.run.paused = true;
   if (state.run.audioMode === 'visual') {
     state.run.visualElapsedBeforePause = currentRunTime(); state.run.visualStartedAt = null;
@@ -1342,6 +1566,7 @@ function pauseRunAudio() {
   renderRun(); updateAll();
 }
 async function resumeRunAudio() {
+  try{await persistRunProgress('active',{paused:false});}catch(error){return showPersistenceError(error);}
   state.run.paused = false;
   if (state.run.audioMode === 'visual') state.run.visualStartedAt = Date.now();
   else { try { await runAudioElement()?.play(); } catch (_) { showToast('Tap Resume inside Proof to restart audio.'); } }
@@ -1349,7 +1574,10 @@ async function resumeRunAudio() {
   clearInterval(runUiTicker); runUiTicker = setInterval(updateRunUi, 500);
   renderRun(); updateAll();
 }
-function finishRunSession(natural = false) {
+async function finishRunSession(natural = false) {
+  if(state.run.completed||!state.run.id) return;
+  const position=natural?RUN_TOTAL_SECONDS:currentRunTime();
+  try{const record=await persistRunProgress('completed',{audioPositionSeconds:position,paused:false,completedAt:new Date().toISOString()});state.runHistory=upsertById(state.runHistory,record);}catch(error){return showPersistenceError(error);}
   clearInterval(runUiTicker); runUiTicker = null;
   const audio = runAudioElement(); if (audio) { audio.pause(); if (!natural) audio.currentTime = 0; }
   state.run.completed = true; state.run.active = false; state.run.paused = false; state.run.step = 'receipt';
@@ -1357,6 +1585,12 @@ function finishRunSession(natural = false) {
   releaseRunWakeLock();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
   renderRun(); updateAll();
+}
+
+async function persistRunProgress(status,patch={}) {
+  if(!state.run.id) return null;
+  const now=new Date().toISOString();
+  return persistence.saveRun({id:state.run.id,status,audioPositionSeconds:currentRunTime(),currentPhaseIndex:runPhaseIndex(),paused:state.run.paused,guidanceMode:state.run.audioMode,lastPersistedAt:now,...patch});
 }
 async function testRunCoach() {
   if (state.run.audioMode === 'visual') return;
@@ -1492,19 +1726,21 @@ if ('serviceWorker' in navigator) {
   });
 }
 document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'hidden' && state.run.active) await persistRunProgress(state.run.paused?'paused':'active').catch(showPersistenceError);
   if (document.visibilityState === 'visible' && state.run.active && state.run.keepAwake) await requestRunWakeLock();
 });
+window.addEventListener('pagehide',()=>{if(state.run.active) persistRunProgress(state.run.paused?'paused':'active').catch(()=>{});});
 
 function bindGlobalActions() {
   document.querySelectorAll('[data-action="start-workout"]').forEach(button => button.addEventListener('click', startWorkout));
-  document.querySelectorAll('[data-action="open-recovery-demo"]').forEach(button => button.addEventListener('click', recoveryDemo));
   document.querySelectorAll('[data-action="open-feeling"]').forEach(button => button.addEventListener('click', openFeeling));
   document.querySelectorAll('[data-action="log-weight"]').forEach(button => button.addEventListener('click', logWeight));
-  document.querySelectorAll('[data-action="preview-progression"]').forEach(button => button.addEventListener('click', progressionDemo));
-  document.querySelectorAll('[data-action="show-tempo"]').forEach(button => button.addEventListener('click', tempoDemo));
-  document.querySelectorAll('[data-action="export-demo"]').forEach(button => button.addEventListener('click', exportDemo));
-  document.querySelectorAll('[data-action="import-demo"]').forEach(button => button.addEventListener('click', importDemo));
-  document.querySelectorAll('[data-action="end-workout-menu"]').forEach(button => button.addEventListener('click', recoveryDemo));
+  document.querySelectorAll('[data-action="preview-progression"]').forEach(button => button.addEventListener('click', showProgressionRules));
+  document.querySelectorAll('[data-action="export-data"]').forEach(button => button.addEventListener('click', exportData));
+  document.querySelectorAll('[data-action="import-data"]').forEach(button => button.addEventListener('click', chooseImportFile));
+  document.querySelectorAll('[data-action="reset-data"]').forEach(button => button.addEventListener('click', resetData));
+  document.getElementById('importFileInput')?.addEventListener('change',event=>{importDataFile(event.target.files?.[0]);event.target.value='';});
+  document.querySelectorAll('[data-action="end-workout-menu"]').forEach(button => button.addEventListener('click', openWorkoutRecovery));
   document.querySelectorAll('[data-action="minimise-workout"]').forEach(button => button.addEventListener('click', minimiseWorkout));
   document.querySelectorAll('[data-action="week-four-review"]').forEach(button => button.addEventListener('click', weekFourReview));
   document.querySelectorAll('[data-action="choose-schedule"]').forEach(button => button.addEventListener('click', chooseSchedule));
@@ -1520,16 +1756,46 @@ document.querySelectorAll('[data-plan-view]').forEach(button => button.addEventL
   document.getElementById('blockPlanView').classList.toggle('hidden', button.dataset.planView !== 'blocks');
 }));
 
-bindRunAudioEvents();
-prepareRunAudio();
-injectWeeklyCoach();
-updateActiveWorkoutStrip();
-updateActiveRunStrip();
-updateLongTermUI();
-updateProgrammeUI();
-setTheme('dark');
-renderOnboarding();
-renderMeals();
-renderTodayMeals();
-updateDailyStatus();
-bindGlobalActions();
+function hydrateOnboardingDraft(draft) {
+  if(!draft) return;
+  Object.assign(onboardingState,draft,{days:[...(draft.days||onboardingState.days)],exclusions:new Set(draft.exclusions||[])});
+}
+
+function showRunRecovery() {
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Saved run</span><h2 id="modalTitle">Resume your coached run?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>The last saved audio position is ${formatTime(Math.floor(state.run.visualElapsedBeforePause||0))}. It may be a few seconds behind the exact interruption point.</p><div class="modal-actions"><button class="button button-secondary" id="endRecoveredRun">End run</button><button class="button button-primary" id="resumeRecoveredRun">Open run</button></div>`);
+  document.getElementById('resumeRecoveredRun').addEventListener('click',()=>{closeModal();prepareRunAudio();const audio=runAudioElement();if(audio&&state.run.audioMode!=='visual')audio.currentTime=state.run.visualElapsedBeforePause||0;renderRun();showScreen('run');});
+  document.getElementById('endRecoveredRun').addEventListener('click',async()=>{await finishRunSession(false);closeModal();showScreen('plan');});
+}
+
+function renderPersistenceFailure(result) {
+  const loading=document.getElementById('persistenceLoading');
+  loading.innerHTML=`<section class="persistence-recovery"><span class="eyebrow">Local storage unavailable</span><h1>Proof Fitness could not open your records.</h1><p>This is not treated as a new installation. Retry first; export any accessible data before considering a destructive reset.</p><pre id="persistenceDiagnostics">${JSON.stringify(result.diagnostics,null,2)}</pre><div class="button-row"><button class="button button-primary" id="retryPersistence">Retry</button><button class="button button-secondary" id="copyDiagnostics">Copy diagnostics</button><button class="button button-secondary" id="recoveryExport">Export data</button><button class="button button-ghost" id="recoveryReset">Reset as last resort</button></div></section>`;
+  document.getElementById('retryPersistence').addEventListener('click',()=>window.location.reload());
+  document.getElementById('copyDiagnostics').addEventListener('click',()=>navigator.clipboard?.writeText(JSON.stringify(result.diagnostics,null,2)).then(()=>showToast('Diagnostics copied.')).catch(()=>{}));
+  document.getElementById('recoveryExport').addEventListener('click',exportData);
+  document.getElementById('recoveryReset').addEventListener('click',async()=>{
+    if(window.prompt('Last resort: type RESET to permanently delete all Proof Fitness records.')!=='RESET') return;
+    try{await persistence.resetAll();if('caches' in window){for(const key of await caches.keys())if(key.startsWith('proof-fitness-'))await caches.delete(key);}window.location.reload();}catch(error){document.getElementById('persistenceDiagnostics').textContent+=`\nReset failed: ${error.message}`;}
+  });
+}
+
+async function initialiseApplication() {
+  bindGlobalActions(); bindRunAudioEvents();
+  const result=await bootstrapApplication();
+  if(!result.ok){renderPersistenceFailure(result);return;}
+  applyHydratedState(result.state); state.persistenceReady=true;
+  state.pullupLevel=state.equipment.pullUpProgressionRung||2;
+  setTheme(state.theme);
+  const dateText=new Intl.DateTimeFormat(undefined,{weekday:'long',day:'numeric',month:'long'}).format(new Date());
+  document.getElementById('todayLocalDate').textContent=dateText.toUpperCase();
+  document.getElementById('mealPlanDay').textContent=`${new Intl.DateTimeFormat(undefined,{weekday:'long'}).format(new Date())} plan`;
+  document.getElementById('mealPageTitle').textContent=`${new Intl.DateTimeFormat(undefined,{weekday:'long'}).format(new Date())} fuel`;
+  if(state.appMeta?.lastExportedAt) document.getElementById('lastBackupText').textContent=new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(state.appMeta.lastExportedAt));
+  document.getElementById('persistenceLoading').classList.add('hidden');
+  if(!state.appMeta?.onboardingCompletedAt){hydrateOnboardingDraft(state.appMeta?.onboardingDraft);renderOnboarding();document.getElementById('onboardingLayer').classList.remove('completed');return;}
+  if(!state.programme) return renderPersistenceFailure({diagnostics:{name:'ProgrammeStateError',message:'Onboarding is complete but the active programme state is missing.',time:new Date().toISOString()}});
+  prepareRunAudio(); injectWeeklyCoach(); updateAll();
+  if(state.workout.sessionId) openWorkoutRecovery(); else if(state.run.id) showRunRecovery();
+}
+
+initialiseApplication();

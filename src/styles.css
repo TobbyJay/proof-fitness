@@ -22,6 +22,16 @@
 }
 
 * { box-sizing: border-box; }
+
+.persistence-loading {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; gap: .5rem;
+  padding: 2rem; background: #11140f; color: #f4f0e7; text-align: center;
+}
+.persistence-loading.hidden { display: none; }
+.persistence-loading > span { color: #aeb6a1; }
+.persistence-recovery { max-width: 760px; text-align: left; }
+.persistence-recovery h1 { font-size: clamp(2rem,5vw,4rem); margin: .5rem 0 1rem; }
+.persistence-recovery pre { overflow: auto; padding: 1rem; border: 1px solid #394132; background: #1a1f17; color: #cfd8c5; }
 html { background: var(--bone); }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--bone); color: var(--text); }
 button, input, select { font: inherit; }

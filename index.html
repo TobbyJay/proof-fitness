@@ -9,7 +9,7 @@
   <link rel="icon" href="/icons/proof-mark.svg" type="image/svg+xml" />
 </head>
 <body>
-  <div class="onboarding-layer" id="onboardingLayer">
+  <div class="onboarding-layer completed" id="onboardingLayer">
     <section class="onboarding-brand-panel">
       <button class="brand-mark onboarding-brand" aria-label="Proof Fitness">
         <span class="brand-glyph">P</span><span class="brand-word">PROOF</span>
@@ -26,6 +26,7 @@
       <div id="onboardingContent"></div>
     </section>
   </div>
+  <div class="persistence-loading" id="persistenceLoading"><strong>Opening Proof Fitness…</strong><span>Loading your private on-device records.</span></div>
   <div id="app" class="app-shell" data-theme="dark">
     <aside class="desktop-rail" aria-label="Primary navigation">
       <button class="brand-mark" data-go="today" aria-label="Go to Today">
@@ -40,7 +41,7 @@
         <button class="nav-item" data-go="data"><span>⇄</span><span>Data</span></button>
       </nav>
       <div class="rail-bottom">
-        <div class="rail-streak"><span class="eyebrow">Streak</span><strong>12 days</strong></div>
+        <div class="rail-streak"><span class="eyebrow">Streak</span><strong id="streakLabel">0 days</strong></div>
         <button class="icon-button" id="themeToggle" aria-label="Toggle appearance">☼</button>
       </div>
     </aside>
@@ -58,14 +59,13 @@
           <div class="primary-column">
             <header class="editorial-hero">
               <div class="hero-meta">
-                <span>FRIDAY · 31 JULY</span>
+                <span id="todayLocalDate">TODAY</span>
                 <span id="todayProgrammeMeta">WEEK 1 · FOUNDATION · THREE-DAY</span>
               </div>
               <h1 id="todayWorkoutName">Full Body A</h1>
               <p class="hero-subtitle" id="todayWorkoutSummary">Foundation · versioned workout preview loading.</p>
               <div class="hero-actions">
                 <button class="button button-primary button-large" data-action="start-workout">Start workout</button>
-                <button class="button button-ghost" data-action="open-recovery-demo">Preview recovery flow</button>
               </div>
             </header>
 
@@ -75,16 +75,16 @@
               <div class="section-heading-row">
                 <div>
                   <span class="eyebrow">Accountability</span>
-                  <h2 id="proof-line-title">Twelve days of proof</h2>
+                  <h2 id="proof-line-title">Start with today</h2>
                 </div>
-                <span class="status-pill success">On track</span>
+                <span class="status-pill neutral" id="proofLineStatus">No records yet</span>
               </div>
               <div class="proof-line" aria-label="Weekly accountability status">
-                <div class="proof-day done"><span>M</span><strong>✓</strong><small>Workout</small></div>
-                <div class="proof-day rest"><span>T</span><strong>✓</strong><small>Rest</small></div>
-                <div class="proof-day done"><span>W</span><strong>✓</strong><small>Workout</small></div>
-                <div class="proof-day rest"><span>T</span><strong>✓</strong><small>Rest</small></div>
-                <div class="proof-day current"><span>F</span><strong>•</strong><small>Now</small></div>
+                <div class="proof-day future"><span>M</span><strong>—</strong><small>Planned</small></div>
+                <div class="proof-day future"><span>T</span><strong>—</strong><small>Planned</small></div>
+                <div class="proof-day future"><span>W</span><strong>—</strong><small>Planned</small></div>
+                <div class="proof-day future"><span>T</span><strong>—</strong><small>Planned</small></div>
+                <div class="proof-day future"><span>F</span><strong>—</strong><small>Planned</small></div>
                 <div class="proof-day future"><span>S</span><strong>—</strong><small>Optional</small></div>
                 <div class="proof-day future"><span>S</span><strong>—</strong><small>Rest</small></div>
               </div>
@@ -128,7 +128,7 @@
               <div class="section-heading-row compact-row">
                 <div>
                   <span class="eyebrow">Meals</span>
-                  <h3>Friday plan</h3>
+                  <h3 id="mealPlanDay">Today’s plan</h3>
                 </div>
                 <button class="text-button" data-go="plan">View all</button>
               </div>
@@ -150,7 +150,7 @@
             <section class="context-panel backup-panel">
               <div>
                 <span class="eyebrow">Local data</span>
-                <h3>Backup due in 3 days</h3>
+                <h3>Export your data</h3>
                 <p>Your records stay on this device until you export them.</p>
               </div>
               <button class="icon-button accent" data-go="data" aria-label="Open data backup">⇄</button>
@@ -163,7 +163,7 @@
         <div class="screen-grid plan-grid">
           <div class="primary-column">
             <header class="page-heading">
-              <div><span class="eyebrow">Plan</span><h1>Friday fuel</h1></div>
+              <div><span class="eyebrow">Plan</span><h1 id="mealPageTitle">Today’s fuel</h1></div>
               <div class="segmented-control" role="group" aria-label="Plan view">
                 <button class="selected" data-plan-view="meals">Meals</button>
                 <button data-plan-view="week">Week</button>
@@ -180,7 +180,7 @@
                 <article class="programme-day"><span>C</span><div><strong>Full Body C</strong><small>Required · conditional pull-up progression or dumbbell pullover</small></div><b>03</b></article>
                 <article class="programme-day run"><span>E</span><div><strong>Optional conditioning or recovery</strong><small>Run–walk, brisk walk, or mobility · never gates strength completion</small></div><b>OPT</b></article>
               </div>
-              <button class="button button-secondary full-width run-preview-button" data-action="preview-run">Preview first run</button>
+              <button class="button button-secondary full-width run-preview-button" data-action="preview-run">Open starter run</button>
             </div>
 
             <div id="blockPlanView" class="block-plan hidden">
@@ -199,7 +199,7 @@
                 <article class="training-block"><span>06</span><div><small>Weeks 41–48</small><h3>Hybrid consolidation</h3><p>Hold muscle and strength while becoming a more capable runner.</p></div><b>06</b></article>
                 <article class="training-block review"><span>↺</span><div><small>Weeks 49–52</small><h3>Review and reset</h3><p>Lighter training, annual comparison and selection of the next year’s emphasis.</p></div><b>YEAR</b></article>
               </div>
-              <div class="button-row"><button class="button button-primary" data-action="week-four-review">Preview Week 4 review</button><button class="button button-ghost" data-action="choose-schedule">Compare four- and three-day modes</button></div>
+              <div class="button-row"><button class="button button-primary" data-action="week-four-review">Open Week 4 review</button><button class="button button-ghost" data-action="choose-schedule">Compare four- and three-day modes</button></div>
             </div>
           </div>
 
@@ -207,7 +207,7 @@
             <section class="context-panel nutrition-brief">
               <span class="eyebrow">Daily target</span>
               <div class="nutrition-number"><strong>125–140</strong><span>g protein</span></div>
-              <p>Three proper meals plus one protein-based snack. Alternatives prioritise similar protein and energy—not fake nutritional equivalence.</p>
+              <p>Three proper meals plus one protein-based snack. Alternatives prioritise a similar training-day role without claiming exact nutritional equivalence.</p>
             </section>
             <section class="context-panel">
               <span class="eyebrow">Meal rule</span>
@@ -249,9 +249,9 @@
             </section>
 
             <section class="metric-strip">
-              <div><small>Weight</small><strong>69.8 kg</strong><span>4-week avg 69.4</span></div>
-              <div><small>Waist</small><strong>84.0 cm</strong><span>Baseline</span></div>
-              <div><small>Domain workouts</small><strong>0</strong><span>Not started</span></div>
+              <div><small>Weight</small><strong id="progressWeight">Not recorded</strong><span id="progressWeightTrend">No trend yet</span></div>
+              <div><small>Waist</small><strong id="progressWaist">Not recorded</strong><span id="progressWaistTrend">No trend yet</span></div>
+              <div><small>Domain workouts</small><strong id="progressWorkoutCount">0</strong><span id="progressWorkoutLabel">Not started</span></div>
               <div><small>Meals</small><strong id="progressMealAdherence">0%</strong><span>Today</span></div>
             </section>
 
@@ -262,7 +262,7 @@
                 <p>The deterministic review considers required sessions, calibration, confidence, discomfort, recovery, and four-day feasibility. It is not a technique or medical assessment.</p>
               </div>
               <div class="year-transition-actions">
-                <button class="button button-primary" data-action="week-four-review">Preview Week 4 review</button>
+                <button class="button button-primary" data-action="week-four-review">Open Week 4 review</button>
                 <button class="button button-secondary" data-action="choose-schedule">Compare schedule modes</button>
               </div>
             </section>
@@ -270,19 +270,19 @@
             <section class="progression-card">
               <div class="section-heading-row">
                 <div><span class="eyebrow">Exercise catalog</span><h2>Barbell Romanian deadlift</h2></div>
-                <span class="status-pill neutral">Not started</span>
+                <span class="status-pill neutral" id="progressionStatus">Not started</span>
               </div>
               <div class="plate-comparison">
                 <div class="plate-side">
                   <small>Current load</small>
-                  <strong>Not calibrated</strong>
+                  <strong id="progressionCurrentLoad">Not calibrated</strong>
                   <div class="barbell-diagram" aria-label="No current load configured"><div class="bar"></div></div>
-                  <p>No performance evidence recorded.</p>
+                  <p id="progressionEvidenceCopy">No performance evidence recorded.</p>
                 </div>
                 <div class="change-chip">→</div>
                 <div class="plate-side next">
                   <small>Next recommendation</small>
-                  <strong>Not eligible</strong>
+                  <strong id="progressionNextLoad">Not eligible</strong>
                   <div class="barbell-diagram" aria-label="No next load recommended"><div class="bar"></div></div>
                   <p>Requires exercise-specific controlled appearances.</p>
                 </div>
@@ -293,7 +293,6 @@
               </div>
               <div class="button-row">
                 <button class="button button-primary" data-action="preview-progression">View decision rules</button>
-                <button class="button button-ghost" data-action="show-tempo">See tempo alternative</button>
               </div>
             </section>
           </div>
@@ -302,8 +301,8 @@
             <section class="context-panel">
               <span class="eyebrow">Progression states</span>
               <ol class="state-list">
-                <li class="done"><span>01</span><div><strong>Calibrate</strong><small>Weeks 1–2</small></div></li>
-                <li class="current"><span>02</span><div><strong>Repeat cleanly</strong><small>Earn evidence</small></div></li>
+                <li><span>01</span><div><strong>Calibrate</strong><small>Not started</small></div></li>
+                <li><span>02</span><div><strong>Repeat cleanly</strong><small>Earn evidence</small></div></li>
                 <li><span>03</span><div><strong>Recommend</strong><small>Never change silently</small></div></li>
                 <li><span>04</span><div><strong>Confirm</strong><small>Accept, defer or choose another method</small></div></li>
               </ol>
@@ -311,13 +310,13 @@
             <section class="context-panel pullup-path-card">
               <span class="eyebrow">Pull-up path</span>
               <h3 id="pullupProgressLabel">Locked · owned, not installed</h3>
-              <div class="pullup-mini-path"><span class="done">Hang</span><span class="current">Negative</span><span>Assisted</span><span>Strict</span></div>
+              <div class="pullup-mini-path"><span>Hang</span><span>Negative</span><span>Assisted</span><span>Strict</span></div>
               <button class="button button-secondary full-width" id="pullupPathButton" data-action="choose-pullup-level">Set up pull-up bar</button>
             </section>
             <section class="context-panel warning-panel">
-              <span class="eyebrow">Large jump warning</span>
-              <h3>Lateral raise: 2.5 → 3.5 kg</h3>
-              <p>That is a 40% increase per dumbbell. The app recommends tempo or another successful appearance first.</p>
+              <span class="eyebrow">Load safety</span>
+              <h3>Large jumps are checked</h3>
+              <p>Recommendations remain unavailable until real exercise-specific evidence exists and the owned plates can make the load.</p>
             </section>
           </aside>
         </div>
@@ -328,38 +327,11 @@
           <div class="primary-column">
             <header class="page-heading">
               <div><span class="eyebrow">History</span><h1>Your record, not a highlight reel</h1></div>
-              <button class="button button-ghost">Filter</button>
             </header>
-            <div class="history-list">
-              <article class="history-entry">
-                <div class="history-date"><strong>29</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Prototype example</span><h3>Full Body B</h3><p>Legacy demonstration record · not programme evidence</p></div>
-                <span class="status-pill neutral">Demo</span>
-              </article>
-              <article class="history-entry">
-                <div class="history-date"><strong>28</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Rest day</span><h3>Meals and check-in</h3><p>4 of 4 meals · feeling: Good</p></div>
-                <span class="status-pill rest">Qualified</span>
-              </article>
-              <article class="history-entry run-entry">
-                <div class="history-date"><strong>27</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Run–walk 01</span><h3>Easy aerobic foundation</h3><p>28:00 · 6 run intervals · conversational effort</p></div>
-                <span class="status-pill rest">Complete</span>
-              </article>
-              <article class="history-entry partial">
-                <div class="history-date"><strong>26</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Prototype example</span><h3>Optional conditioning</h3><p>Legacy demonstration record · not programme evidence</p></div>
-                <span class="status-pill neutral">Demo</span>
-              </article>
-            </div>
+            <div class="history-list" id="historyList"><section class="insight-banner"><h2>No activity yet.</h2><p>Completed workouts and runs will appear here after they are saved.</p></section></div>
           </div>
           <aside class="context-column">
-            <section class="context-panel receipt-mini">
-              <span class="eyebrow">Selected receipt</span>
-              <h3>Full Body B</h3>
-              <div class="receipt-rule"></div>
-              <dl><div><dt>Status</dt><dd>Legacy demo</dd></div><div><dt>Programme evidence</dt><dd>Not used</dd></div><div><dt>Migration</dt><dd>Next phase</dd></div></dl>
-            </section>
+            <section class="context-panel receipt-mini"><span class="eyebrow">Saved locally</span><h3 id="historyCount">0 sessions</h3><p>History is derived from IndexedDB records.</p></section>
           </aside>
         </div>
       </section>
@@ -369,38 +341,40 @@
           <div class="primary-column">
             <header class="page-heading">
               <div><span class="eyebrow">Data</span><h1>Your records should be portable</h1></div>
-              <span class="status-pill neutral">Local-only prototype</span>
+              <span class="status-pill neutral">Local IndexedDB</span>
             </header>
 
             <section class="data-hero">
               <div>
                 <span class="eyebrow">Last backup</span>
-                <h2>Never</h2>
-                <p>The production app stores your records locally. Export before clearing browser data or changing devices.</p>
+                <h2 id="lastBackupText">Never</h2>
+                <p>Your records stay on this device. Export before clearing browser data or changing devices.</p>
               </div>
               <div class="data-actions">
-                <button class="button button-primary button-large" data-action="export-demo">Export backup</button>
-                <button class="button button-secondary" data-action="import-demo">Import backup</button>
+                <button class="button button-primary button-large" data-action="export-data">Export backup</button>
+                <button class="button button-secondary" data-action="import-data">Restore backup</button>
+                <input class="hidden" id="importFileInput" type="file" accept="application/json">
               </div>
             </section>
 
             <section class="record-inventory">
-              <div><span>Strength + run sessions</span><strong>3</strong></div>
+              <div><span>Strength + run sessions</span><strong id="dataSessionCount">0</strong></div>
               <div><span>Meal checks</span><strong id="dataMealChecks">0</strong></div>
               <div><span>Measurements</span><strong id="dataMeasurements">0</strong></div>
-              <div><span>Schema version</span><strong>0.4-demo</strong></div>
+              <div><span>Database schema</span><strong>1</strong></div>
             </section>
 
             <section class="privacy-note">
-              <strong>Prototype boundary</strong>
-              <p>This design demonstrates export, import preview and conflict resolution. It does not use IndexedDB or production data migrations yet. The included service worker only supports basic app and media caching.</p>
+              <strong>Private on-device storage</strong>
+              <p>No account or backend is required. Clearing this browser's site data removes local records, so keep a recent export.</p>
             </section>
           </div>
           <aside class="context-column">
             <section class="context-panel">
               <span class="eyebrow">Import contract</span>
-              <ol class="numbered-list"><li>Validate file</li><li>Preview counts</li><li>Resolve conflicts</li><li>Merge or replace</li><li>Recalculate streaks</li></ol>
+              <ol class="numbered-list"><li>Validate file</li><li>Confirm replacement</li><li>Restore transactionally</li><li>Recalculate derived values</li></ol>
             </section>
+            <section class="context-panel warning-panel"><span class="eyebrow">Destructive action</span><h3>Reset all Proof Fitness data</h3><p>Deletes workouts, runs, meals, measurements, programme state, and onboarding from this browser.</p><button class="button button-ghost full-width" data-action="reset-data">Reset all data</button></section>
           </aside>
         </div>
       </section>

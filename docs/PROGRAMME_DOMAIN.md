@@ -12,7 +12,7 @@ This domain is the programme source of truth. It is deliberately separate from t
 - `src/domain/reviews/` owns the deterministic Foundation readiness review.
 - `src/domain/scheduling/` owns schedule modes and completion-ordered rotation.
 - `src/domain/workouts/` validates templates, estimates duration, and creates immutable execution snapshots.
-- `src/app.js` renders these records and holds temporary prototype state. It is not the authoritative programme definition.
+- `src/app.js` renders hydrated records and coordinates user actions. It is not the authoritative programme definition.
 
 The layers are intentionally distinct: exercise definition ≠ workout template ≠ programme state ≠ workout session ≠ rendered interface.
 
@@ -87,9 +87,9 @@ Calibration and performance evidence are maps keyed by exercise ID. Barbell row 
 
 The duration estimator uses working sets, exercise-specific set duration, unilateral work, rest, transitions, and preparation/setup. Required templates validate inside a documented 40–55 minute tolerance around the normal 45–50 minute target. Optional within-workout work is excluded from required-completion duration.
 
-## Persistence hand-off
+## Persistence mapping
 
-The later persistence layer should store these direct mappings:
+The IndexedDB persistence layer stores these direct mappings:
 
 | Persistence concept | Programme-domain field |
 | --- | --- |
@@ -105,4 +105,4 @@ The later persistence layer should store these direct mappings:
 | `templateId` / `templateVersion` | workout snapshot |
 | `workoutSnapshot` | full frozen snapshot serialized as a plain object |
 
-IndexedDB, durable repositories, full export/import, and populated-demo removal are intentionally not implemented here. They are the next production-hardening phase.
+The domain remains independent of Dexie and rendering. Persistence serialises domain state and immutable snapshots without redefining templates or rewriting historical sessions.

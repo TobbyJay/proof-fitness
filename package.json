@@ -23,6 +23,10 @@
     "audio:verify": "scripts/audio/.venv/bin/python scripts/audio/verify_audio.py"
   },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
     "vite": "^8.1.5"
+  },
+  "dependencies": {
+    "dexie": "^4.4.4"
   }
 }
