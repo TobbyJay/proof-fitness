@@ -6,14 +6,14 @@ The current repository packages the approved **v0.4.2.1 interactive product prot
 
 ## Highlights
 
-- Three required home strength sessions, with optional sessions kept separate from the streak.
+- Versioned Foundation A/B/C and Lean Athletic four-day/three-day strength programmes, with optional sessions kept separate from the streak.
 - Exact plate-loading guidance for a 50 kg spin-lock weight set.
 - Conditional pull-up programming: pull-ups unlock only after the bar is installed and safety-confirmed.
 - Nigerian meal planning with approved alternatives and minimal adherence logging.
-- Exercise form videos, written form cues, substitutions, and progressive-overload recommendations.
+- One authoritative exercise catalog, complete ID-based substitutions, immutable workout snapshots, and exercise-specific progression rules.
 - Rest timers with selectable completion tones and vibration where supported.
 - A continuous voice-coached run–walk programme designed for earphones and lock-screen media playback.
-- Twelve-month training blocks, Week 8 review, track selection, and weekly coaching concepts.
+- Four-week Foundation calibration, a deterministic Week 4 readiness review, optional extensions, and a preserved long-term review/reset spine.
 - Responsive light and dark interfaces.
 - PWA manifest and a lightweight runtime-caching service worker for production builds.
 
@@ -23,6 +23,10 @@ The experience and flows are approved. This repository is the development-ready 
 
 Working now:
 
+- Programme domain v1 with 44 complete versioned exercise definitions and 10 required workout templates.
+- Foundation Weeks 1–4, A → B → C rotation, Week 4 review, and one/two-week extensions.
+- Four-day Lean Athletic, optional E, permanent three-day fallback, pure schedule transitions, and conditional pull-up resolution.
+- Equipment-aware immutable workout snapshots and achievable-plate validation.
 - Complete clickable onboarding, planning, workout, running, progress, history, and data-transfer demonstrations.
 - Local audio assets for the run coach.
 - Responsive mobile and desktop layouts.
@@ -36,7 +40,7 @@ Still to be implemented for production:
 - Versioned export/import with conflict resolution.
 - Reliable notification fallbacks and device-specific background-audio testing.
 - Complete accessibility audit and automated browser tests.
-- Production training-block generation and progression state machines.
+- Durable repositories for the implemented programme, snapshot, review, transition, and progression state.
 
 See [`docs/PRODUCT_STATUS.md`](docs/PRODUCT_STATUS.md) for the boundary between prototype behaviour and production work.
 
@@ -75,7 +79,7 @@ npm run build
 npm run preview
 ```
 
-`npm run check` validates the main JavaScript syntax and verifies that the required app, manifest, and coached-audio files exist.
+`npm run check` validates JavaScript syntax, repository structure, the programme domain, and all tests. `npm run programme:validate` runs the domain-only catalog/template check.
 
 ## Repository structure
 
@@ -86,6 +90,8 @@ proof-fitness/
 ├── docs/
 │   ├── audio-generation.md
 │   ├── PRODUCT_STATUS.md
+│   ├── PROGRAMME_DOMAIN.md
+│   ├── EXERCISE_CATALOG.md
 │   └── requirements/
 ├── public/
 │   ├── audio/
@@ -97,6 +103,7 @@ proof-fitness/
 │   └── verify-project.mjs
 ├── src/
 │   ├── app.js
+│   ├── domain/
 │   ├── main.js
 │   └── styles.css
 ├── index.html

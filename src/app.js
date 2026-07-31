@@ -1,5 +1,18 @@
 import starterRun from '../audio-scripts/starter-run.json';
 import { phaseAtTime, phaseIndexAtTime } from './run-phase.js';
+import { DEFAULT_EQUIPMENT } from './domain/equipment/equipmentCatalog.js';
+import { getExercise } from './domain/exercises/exerciseCatalog.js';
+import { getSubstitutionOptions } from './domain/exercises/substitutions.js';
+import { PULL_UP_RUNGS } from './domain/exercises/pullUpProgression.js';
+import { createProgrammeState } from './domain/programmes/createProgrammeState.js';
+import { applyFoundationExtension } from './domain/programmes/foundationProgramme.js';
+import { getWorkoutTemplate } from './domain/programmes/programmeCatalog.js';
+import { nextRequiredWorkout } from './domain/scheduling/workoutRotation.js';
+import { createWorkoutSnapshot } from './domain/workouts/createWorkoutSnapshot.js';
+import { estimateWorkoutDuration } from './domain/workouts/estimateWorkoutDuration.js';
+import { foundationReadinessReview } from './domain/reviews/foundationReadinessReview.js';
+import { applyProgrammeTransition, createProgrammeTransition } from './domain/programmes/programmeTransitions.js';
+import { recordCalibration } from './domain/progression/calibration.js';
 
 const RUN_MODE_STORAGE_KEY = 'proof-fitness.run-guidance-mode';
 const RUN_CACHE_NAME = 'proof-fitness-v0.2.0';
@@ -64,95 +77,10 @@ const warmupResource = {
   guideUrl: 'https://www.nhs.uk/live-well/exercise/how-to-warm-up-before-exercising/'
 };
 
-const workoutExercises = [
-  { id:'lunge', name:'Reverse lunge', sets:3, target:'8–12 each leg', load:'5 kg', qualifier:'per dumbbell', plates:'2.5 kg on each end', type:'paired-dumbbell', cue:'Step back far enough to keep the front foot planted. Drive through the full foot.', setup:'Stand tall with the dumbbells steady at your sides.', mistake:'Do not push only through the front toes or let the knee collapse inward.', easier:'Use bodyweight while learning the pattern.', youtubeTitle:'Reverse Lunge · Muscle & Strength', youtubeUrl:'https://www.youtube.com/watch?v=-EHKqzT1sU8', guideSource:'Mayo Clinic lunge guide', guideUrl:'https://www.mayoclinic.org/healthy-lifestyle/fitness/multimedia/lunge/vid-20084662' },
-  { id:'pushup', name:'Push-up', sets:4, target:'8–20', load:'Bodyweight', qualifier:'standard variation', plates:'No plates', type:'bodyweight', cue:'Keep ribs and hips aligned. Lower the chest without letting the hips sag.', setup:'Place hands slightly wider than shoulder width and create one line from head to heel.', mistake:'Do not let the lower back collapse or flare the elbows aggressively.', easier:'Use a stable incline or modified push-up.', youtubeTitle:'Push-up Technique · NASM', youtubeUrl:'https://www.youtube.com/watch?v=RvEgqDfh4bg', guideSource:'ACE push-up guide', guideUrl:'https://www.acefitness.org/resources/everyone/exercise-library/41/push-up/' },
-  { id:'bridge', name:'Barbell glute bridge', sets:4, target:'10–15', load:'15 kg', qualifier:'plate-only', plates:'5 kg + 2.5 kg per side', type:'barbell', cue:'Finish by squeezing the glutes, not arching the lower back.', setup:'Place the padded bar across the hips with feet planted and knees bent.', mistake:'Do not finish the movement by overextending the lower back.', easier:'Rehearse the movement without the bar.', youtubeTitle:'Barbell Glute Bridge · Muscle & Strength', youtubeUrl:'https://www.youtube.com/watch?v=QWXttb8-n50', guideSource:'ACE hip bridge guide', guideUrl:'https://www.acefitness.org/resources/everyone/exercise-library/318/hip-bridge/' },
-  { id:'pullup', name:'Pull-up progression', sets:3, target:'quality reps by rung', load:'Bodyweight', qualifier:'selected progression', plates:'Pull-up bar · confirm secure fit before every session', type:'bodyweight', cue:'Start with active shoulders and drive the elbows toward the ribs. No kipping.', setup:'Use a stable step to reach the bar. Test the bar with partial bodyweight before hanging fully.', mistake:'Do not jump into uncontrolled negatives, swing, or train on a loose doorway bar.', easier:'Dead hang, scapular pull-up, flexed-arm hold or controlled negative.', youtubeTitle:'How To Do Pull-Ups For Complete Beginners · FitnessFAQs', youtubeUrl:'https://www.youtube.com/watch?v=aNUSgyWRJYA', guideSource:'FitnessFAQs pull-up tutorial library', guideUrl:'https://fitnessfaqs.com/articles/ff-video-tag/pull-up-tutorial/' },
-  { id:'raise', name:'Dumbbell lateral raise', sets:3, target:'12–20', load:'2.5 kg', qualifier:'per dumbbell', plates:'1.25 kg on each end', type:'paired-dumbbell', cue:'Raise with soft elbows and stop around shoulder height. Do not shrug.', setup:'Stand tall with light dumbbells and soft elbows.', mistake:'Do not swing, shrug or lift far above shoulder height.', easier:'Use one arm at a time or reduce the load.', youtubeTitle:'Lateral Raise Technique · Renaissance Periodization', youtubeUrl:'https://www.youtube.com/watch?v=n5dsI9qQXwY', guideSource:'ACE lateral raise guide', guideUrl:'https://www.acefitness.org/resources/everyone/exercise-library/26/lateral-raise/' },
-  { id:'triceps', name:'Overhead triceps extension', sets:2, target:'10–15', load:'5 kg', qualifier:'one dumbbell', plates:'2.5 kg on each end', type:'single-dumbbell', cue:'Keep the upper arms mostly vertical and control the bottom position.', setup:'Hold one dumbbell securely overhead with the ribs controlled.', mistake:'Do not flare the elbows excessively or arch the lower back.', easier:'Reduce the load and shorten the range while keeping control.', youtubeTitle:'Overhead Triceps Extension · Renaissance Periodization', youtubeUrl:'https://www.youtube.com/watch?v=iKX6vEhrGxw', guideSource:'ACE triceps extension guide', guideUrl:'https://www.acefitness.org/resources/everyone/exercise-library/74/triceps-extension/' }
-
-];
-
-const pullupFallbackExercise = {
-  id:'pullover', name:'Dumbbell pullover', sets:3, target:'10–15', load:'7.5 kg', qualifier:'one dumbbell · plate-only',
-  plates:'2.5 kg + 1.25 kg on each end', type:'single-dumbbell',
-  cue:'Keep the ribs controlled and move only as far as the shoulders remain comfortable.',
-  setup:'Lie securely on the floor or across a stable support, hold one dumbbell above the chest and keep a soft bend in the elbows.',
-  mistake:'Do not chase excessive depth, flare the ribs or turn the movement into an uncontrolled stretch.',
-  easier:'Use 5 kg plate-only or shorten the range while maintaining control.',
-  youtubeTitle:'How to Properly Dumbbell Pullover · Colossus Fitness',
-  youtubeUrl:'https://www.youtube.com/watch?v=Q8l6ykgnmPM',
-  guideSource:'ACE lying pullover guide',
-  guideUrl:'https://www.acefitness.org/resources/everyone/exercise-library/37/lying-pullovers/',
-  last:'No prior pullover session', next:'8.5 kg plate-only · after two clean sessions',
-  substitutes:[
-    { name:'One-arm dumbbell row', note:'Horizontal pull; familiar fallback' },
-    { name:'Barbell bent-over row', note:'Bilateral pulling alternative' },
-    { name:'Dumbbell floor lat sweep', note:'Low-load lat-focused option' }
-  ],
-  replaces:'pullup'
-};
-
-const exerciseEnhancements = {
-  lunge: {
-    last: 'Bodyweight rehearsal · appropriate', next: '6 kg per dumbbell · after 2 successes',
-    substitutes: [
-      { name:'Static split squat', note:'Easier balance; same knee-dominant pattern' },
-      { name:'Goblet squat', note:'Simpler setup; bilateral alternative' },
-      { name:'Bulgarian split squat', note:'Harder unilateral alternative' }
-    ]
-  },
-  pushup: {
-    last: '10, 9, 8 conceptually · challenging', next: 'Three-second lowering',
-    substitutes: [
-      { name:'Incline push-up', note:'Easier pressing variation' },
-      { name:'Dumbbell floor press', note:'Loaded horizontal press' },
-      { name:'Paused push-up', note:'Same movement with more control' }
-    ]
-  },
-  bridge: {
-    last: '15 kg plates · comfortable', next: '16 kg plates · one more success',
-    substitutes: [
-      { name:'Dumbbell glute bridge', note:'Faster equipment setup' },
-      { name:'Bodyweight hip bridge', note:'Technique or recovery option' },
-      { name:'Romanian deadlift', note:'Hip-dominant alternative' }
-    ]
-  },
-  pullup: {
-    last: 'Scapular control + 3 slow negatives', next: 'Assisted pull-ups, then first strict rep',
-    substitutes: [
-      { name:'One-arm dumbbell row', note:'Horizontal pull; simpler loading' },
-      { name:'Barbell bent-over row', note:'Bilateral pulling alternative' },
-      { name:'Scapular pull-up only', note:'Technique and shoulder-control option' }
-    ]
-  },
-  raise: {
-    last: '2.5 kg each · comfortable', next: 'Tempo before 40% load jump',
-    substitutes: [
-      { name:'Single-arm lateral raise', note:'More control with same load' },
-      { name:'Lean-away lateral raise', note:'Harder range without more plates' },
-      { name:'No-load lateral raise', note:'Technique recovery option' }
-    ]
-  },
-  triceps: {
-    last: '5 kg · appropriate', next: '6 kg · after 2 clean sessions',
-    substitutes: [
-      { name:'Close-grip push-up', note:'Bodyweight triceps emphasis' },
-      { name:'Lying dumbbell extension', note:'Different shoulder position' },
-      { name:'Single-arm extension', note:'Lower effective load per side' }
-    ]
-  }
-};
-workoutExercises.forEach(exercise => Object.assign(exercise, exerciseEnhancements[exercise.id] || {}));
-
-
-const pullupLevels = [
-  { id:1, name:'Hang + scapular control', short:'Scapular control', prescription:'3 × 5 scapular pulls or 15–25 sec hangs', note:'Build grip and learn active shoulders.' },
-  { id:2, name:'Controlled negatives', short:'Controlled negatives', prescription:'3 × 3 negatives · 3–5 sec lowering', note:'Step to the top, then lower without dropping.' },
-  { id:3, name:'Assisted pull-ups', short:'Assisted reps', prescription:'3 × 5–8 assisted reps', note:'Use a band or carefully controlled foot assistance.' },
-  { id:4, name:'Strict pull-ups', short:'Strict reps', prescription:'3 × 3–6 strict reps', note:'Full control, no kip; add reps before load.' }
-];
+const pullupLevels = PULL_UP_RUNGS.map(rung => {
+  const exercise = getExercise(rung.exerciseId);
+  return { id:rung.id, name:rung.name, short:exercise.shortName, prescription:`${exercise.defaultPrescription.sets} × ${exercise.defaultPrescription.repTarget}`, note:exercise.formCues[0] };
+});
 
 
 const runPhases = starterRun.phases.map((phase) => ({
@@ -163,18 +91,14 @@ const runPhases = starterRun.phases.map((phase) => ({
 }));
 const RUN_TOTAL_SECONDS = starterRun.durationSeconds;
 
-const trainingTracks = [
-  { id:'lean', name:'Lean Athletic', recommended:true, strength:'3 days', running:'1–2 easy runs', goal:'Build visible muscle while keeping the waist controlled and improving aerobic capacity.' },
-  { id:'muscle', name:'Muscle Emphasis', strength:'3–4 days', running:'1 easy session', goal:'More weekly hypertrophy volume and slower running progression.' },
-  { id:'hybrid', name:'Hybrid Runner–Strength', strength:'3 days', running:'2–3 runs', goal:'Greater endurance priority with a slower rate of muscle gain.' }
-];
-
 const state = {
   screen: 'today',
   theme: 'dark',
   meals: {},
   feeling: null,
   weight: null,
+  completedToday: false,
+  completedWorkoutSnapshots: [],
   workout: {
     active: false,
     finished: false,
@@ -192,14 +116,16 @@ const state = {
     restWarningPlayed: false,
     substitutions: {},
     forceFullForm: false,
-    pullupEnabledAtStart: null
+    pullupEnabledAtStart: null,
+    snapshot: null,
+    supersededSnapshots: []
   },
   readiness: { energy: 'Good', sleep: 'Okay', soreness: 'Low' },
-  formSeen: { lunge: 0, pushup: 1, bridge: 1, pullup: 0, raise: 1, triceps: 1 },
+  formSeen: {},
   pullupLevel: 2,
-  equipment: { pullupBarStatus: 'owned-not-installed', pullupSafetyConfirmed: false },
-  longTermTrack: 'Lean Athletic',
-  block: { current: 1, week: 1, nextAccepted: false },
+  equipment: { ...DEFAULT_EQUIPMENT, plates: { ...DEFAULT_EQUIPMENT.plates } },
+  programme: createProgrammeState(),
+  foundationEvidence: { completedRequiredWorkouts:0, plannedRequiredWorkouts:12, incompleteCalibrationAreas:6, formConfidence:'not-yet', unresolvedPainOrDiscomfort:false, energy:'good', sleep:'okay', recoveryBetweenSessions:'normal', fourDayScheduleFeasible:false },
   run: {
     active: false,
     step: 'overview',
@@ -231,18 +157,45 @@ const pullupStatusLabels = {
 };
 
 function pullupEnabledForFutureWorkouts() {
-  return state.equipment.pullupBarStatus === 'installed-available' && state.equipment.pullupSafetyConfirmed;
+  return state.equipment.pullUpBarStatus === 'installed-available' && state.equipment.pullUpSafetyConfirmed;
 }
 
 function pullupEnabledForCurrentWorkout() {
-  return typeof state.workout.pullupEnabledAtStart === 'boolean'
-    ? state.workout.pullupEnabledAtStart
+  return state.workout.snapshot
+    ? state.workout.snapshot.pullUpAvailabilitySnapshot.status === 'installed-available' && state.workout.snapshot.pullUpAvailabilitySnapshot.safetyConfirmed
     : pullupEnabledForFutureWorkouts();
 }
 
+function nextWorkoutTemplate() {
+  const next = nextRequiredWorkout({
+    scheduleMode: state.programme.scheduleMode,
+    activeTemplateSetId: state.programme.activeTemplateSetId,
+    lastCompletedTemplateId: state.programme.lastCompletedRequiredTemplateId,
+    activeWorkoutSnapshot: state.workout.active ? state.workout.snapshot : null
+  });
+  return getWorkoutTemplate(next.templateId);
+}
+
+function snapshotExerciseView(exercise) {
+  const definition = getExercise(exercise.exerciseId);
+  const load = exercise.selectedLoad == null
+    ? ['bodyweight','bodyweight-assisted','timed-bodyweight','pull-up-progression'].includes(exercise.loadingMode) ? 'Bodyweight' : 'Calibrate load'
+    : `${exercise.selectedLoad} kg`;
+  return {
+    id:exercise.exerciseId, name:exercise.name, sets:exercise.sets, target:exercise.repTarget,
+    load, qualifier:exercise.loadingMode, plates:exercise.plateLoading?.description || (exercise.loadingMode.includes('bodyweight') || exercise.loadingMode === 'pull-up-progression' ? 'No removable plates' : 'Use a balanced achievable configuration'),
+    type:exercise.loadingMode.includes('bodyweight') || exercise.loadingMode === 'pull-up-progression' ? 'bodyweight' : exercise.equipmentType,
+    cue:exercise.formCues.join(' '), setup:exercise.setupSteps.join(' '), mistake:exercise.commonMistakes.join(' ') || exercise.safetyNotes[0],
+    easier:`Approved regression: ${definition.regressionRule.exerciseId}.`,
+    youtubeTitle:`${exercise.name} form guide`, youtubeUrl:`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.videoSearchTerm)}`,
+    guideSource:`Written ${exercise.name} guidance`, guideUrl:`https://www.google.com/search?q=${encodeURIComponent(exercise.writtenGuidanceSearchTerm)}`,
+    substitutes:getSubstitutionOptions(exercise.substitutionSourceExerciseId || exercise.exerciseId, { pullUpAvailable:pullupEnabledForCurrentWorkout() }).map(item => ({ id:item.id, name:item.name, note:`Uses its own ${item.defaultPrescription.sets} × ${item.defaultPrescription.repTarget} prescription` })),
+    substitutionSourceExerciseId:exercise.substitutionSourceExerciseId, optional:exercise.optional, restSeconds:exercise.restSeconds
+  };
+}
+
 function activeWorkoutExercises() {
-  const includePullups = pullupEnabledForCurrentWorkout();
-  return workoutExercises.map(exercise => exercise.id === 'pullup' && !includePullups ? pullupFallbackExercise : exercise);
+  return (state.workout.snapshot?.exercises || []).map(snapshotExerciseView);
 }
 
 function currentWorkoutExercise() {
@@ -250,7 +203,7 @@ function currentWorkoutExercise() {
 }
 
 function pullupStatusLabel() {
-  return pullupStatusLabels[state.equipment.pullupBarStatus] || 'Unknown';
+  return pullupStatusLabels[state.equipment.pullUpBarStatus] || 'Unknown';
 }
 
 const onboardingState = {
@@ -283,7 +236,7 @@ const onboardingSteps = [
   },
   {
     eyebrow: 'Ready', title: 'Begin Week 1 without more paperwork.', copy: 'Meals are ready. Food exclusions appear when Meals is opened; waist and reminders appear during the first weekly review.',
-    render: () => `<div class="onboarding-summary"><div><span>Name</span><strong>${onboardingState.name}</strong></div><div><span>Goal</span><strong>${onboardingState.weight} → ${onboardingState.target} kg</strong></div><div><span>Required days</span><strong>${onboardingState.days.join(', ')}</strong></div><div><span>First workout</span><strong>Full Body A</strong></div><div><span>Workout C pull slot</span><strong>${onboardingState.pullupBarStatus === 'installed-available' ? 'Pull-up setup pending safety confirmation' : 'Dumbbell pullover until bar activation'}</strong></div><div><span>Long-term track</span><strong>Lean Athletic</strong></div><div><span>Deferred setup</span><strong>Food, waist, reminders</strong></div></div>`
+    render: () => `<div class="onboarding-summary"><div><span>Weeks 1–4</span><strong>Three full-body strength workouts</strong></div><div><span>After Week 4</span><strong>Consistency, calibration and recovery review</strong></div><div><span>Recommended next step</span><strong>Four-day Lean Athletic</strong></div><div><span>Always available</span><strong>Permanent three-day training</strong></div><div><span>First workout</span><strong>Full Body A</strong></div><div><span>Workout C pull slot</span><strong>${onboardingState.pullupBarStatus === 'installed-available' ? 'Pull-up setup pending safety confirmation' : 'Dumbbell pullover until bar activation'}</strong></div></div><div class="pullup-safety"><strong>Four weeks is the default calibration period.</strong><p>You will continue practising form throughout the programme.</p></div>`
   }
 ];
 
@@ -307,12 +260,12 @@ function renderOnboarding() {
     captureOnboardingStep();
     if (onboardingState.step < onboardingSteps.length - 1) { onboardingState.step += 1; renderOnboarding(); }
     else {
-      state.equipment.pullupBarStatus = onboardingState.pullupBarStatus;
-      state.equipment.pullupSafetyConfirmed = false;
+      state.equipment.pullUpBarStatus = onboardingState.pullupBarStatus;
+      state.equipment.pullUpSafetyConfirmed = false;
       layer.classList.add('completed');
       updateLongTermUI();
-      showToast(state.equipment.pullupBarStatus === 'installed-available' ? 'Week 1 is ready. Confirm pull-up bar safety before activation.' : 'Week 1 is ready. Dumbbell pullovers remain scheduled until the pull-up bar is activated.');
-      if (state.equipment.pullupBarStatus === 'installed-available') setTimeout(pullupSetup, 180);
+      showToast(state.equipment.pullUpBarStatus === 'installed-available' ? 'Week 1 is ready. Confirm pull-up bar safety before activation.' : 'Week 1 is ready. Dumbbell pullovers remain scheduled until the pull-up bar is activated.');
+      if (state.equipment.pullUpBarStatus === 'installed-available') setTimeout(pullupSetup, 180);
     }
   });
   document.getElementById('onboardingBack')?.addEventListener('click', () => { captureOnboardingStep(); onboardingState.step -= 1; renderOnboarding(); });
@@ -457,7 +410,7 @@ function mealAdherence() {
 
 function updateDailyStatus() {
   const mealCount = Object.keys(state.meals).length;
-  const completedCount = [state.workout.finished, mealCount === meals.length, Boolean(state.feeling), Boolean(state.weight)].filter(Boolean).length;
+  const completedCount = [state.completedToday, mealCount === meals.length, Boolean(state.feeling), Boolean(state.weight)].filter(Boolean).length;
   document.getElementById('dailyDoneCount').textContent = completedCount;
   document.getElementById('mealStatusText').textContent = mealCount ? `${mealCount} of ${meals.length} checked · ${mealAdherence()}% adherence` : 'Nothing logged yet';
   document.getElementById('mealState').textContent = mealCount === meals.length ? 'Done' : 'Open';
@@ -465,14 +418,14 @@ function updateDailyStatus() {
   document.getElementById('feelingState').textContent = state.feeling ? 'Done' : 'Log';
   document.getElementById('weightStatusText').textContent = state.weight ? `${state.weight.toFixed(1)} kg recorded` : 'Due today · weekly average matters';
   document.getElementById('weightState').textContent = state.weight ? 'Done' : 'Add';
-  document.getElementById('workoutState').textContent = state.workout.finished ? 'Done' : state.workout.active ? 'Resume' : 'Start';
+  document.getElementById('workoutState').textContent = state.workout.active ? 'Resume' : state.completedToday ? 'Done' : 'Start';
   document.getElementById('progressMealAdherence').textContent = `${mealAdherence()}%`;
   document.getElementById('dataMealChecks').textContent = mealCount;
   document.getElementById('dataMeasurements').textContent = state.weight ? 1 : 0;
 
   document.querySelectorAll('.action-row').forEach(row => row.classList.remove('completed'));
   const rows = document.querySelectorAll('.action-row');
-  if (state.workout.finished) rows[0]?.classList.add('completed');
+  if (state.completedToday) rows[0]?.classList.add('completed');
   if (mealCount === meals.length) rows[1]?.classList.add('completed');
   if (state.feeling) rows[2]?.classList.add('completed');
   if (state.weight) rows[3]?.classList.add('completed');
@@ -513,11 +466,32 @@ function updateAll() {
   updateActiveWorkoutStrip();
   updateActiveRunStrip();
   updateLongTermUI();
+  updateProgrammeUI();
+}
+
+function updateProgrammeUI() {
+  const template = nextWorkoutTemplate();
+  const duration = estimateWorkoutDuration(template);
+  const meta = document.getElementById('todayProgrammeMeta');
+  if (meta) meta.textContent = `WEEK ${state.programme.currentProgrammeWeek} · ${state.programme.activePhase.toUpperCase()} · ${state.programme.scheduleMode.replaceAll('-', ' ').toUpperCase()}`;
+  const name = document.getElementById('todayWorkoutName'); if (name) name.textContent = template.name;
+  const summary = document.getElementById('todayWorkoutSummary'); if (summary) summary.textContent = `${duration.minutes} minute estimate · ${template.exercises.length} exercises · ${template.primaryAreas.join(', ')}.`;
+  const action = document.getElementById('todayWorkoutAction'); if (action) action.textContent = `Complete ${template.name}`;
+  const firstSlot = template.exercises[0]; const first = getExercise(firstSlot.exerciseId);
+  const firstExercise = document.getElementById('todayWorkoutFirstExercise'); if (firstExercise) firstExercise.textContent = `Next: ${first.name} · ${firstSlot.sets} × ${firstSlot.repTarget}`;
+  const preview = document.getElementById('todayWorkoutPreview');
+  if (preview) preview.innerHTML = `<div class="section-heading-row"><div><span class="eyebrow">Versioned workout preview</span><h2>${template.name}</h2></div><span class="status-pill neutral">${template.id} · v${template.version}</span></div><p>${template.primaryAreas.join(' · ')}</p><ol class="state-list">${template.exercises.map((slot,index) => { const exercise = slot.conditional ? getExercise(pullupEnabledForFutureWorkouts() ? 'pull-up-progression' : slot.fallbackExerciseId) : getExercise(slot.exerciseId); return `<li><span>${String(index+1).padStart(2,'0')}</span><div><strong>${exercise.name}</strong><small>${exercise.equipmentType} · ${slot.sets} × ${slot.repTarget}${slot.optional ? ' · optional' : ''}</small></div></li>`; }).join('')}</ol>${template.exercises.some(slot => slot.conditional) ? `<p class="substitution-note">Pull slot for the next workout: ${pullupEnabledForFutureWorkouts() ? 'current pull-up rung' : 'dumbbell pullover fallback'}. Starting creates an immutable equipment snapshot.</p>` : ''}<div class="import-summary"><div><span>Optional session</span><strong>${state.programme.activePhase === 'foundation' ? 'Run, walk, or mobility' : 'Optional E'}</strong></div><div><span>Review status</span><strong>${state.programme.activePhase === 'foundation' ? state.programme.currentProgrammeWeek >= 4 ? 'Available' : `Week 4 · ${4-state.programme.currentProgrammeWeek} week(s) away` : 'Foundation review retained'}</strong></div><div><span>Schedule mode</span><strong>${state.programme.scheduleMode}</strong></div></div>`;
 }
 
 async function startWorkout() {
   if (state.settings.restSoundEnabled && !state.settings.audioUnlocked) await unlockRestAudio();
-  if (state.workout.finished) { showToast('This workout is already complete in the prototype.'); return; }
+  if (!state.workout.snapshot) {
+    const template = nextWorkoutTemplate();
+    state.workout.snapshot = createWorkoutSnapshot({
+      template, programmeVersion:state.programme.programmeVersion, programmePhase:state.programme.activePhase,
+      scheduleMode:state.programme.scheduleMode, equipment:state.equipment, pullUpRung:state.pullupLevel
+    });
+  }
   state.workout.active = true;
   if (state.workout.pullupEnabledAtStart === null) state.workout.pullupEnabledAtStart = pullupEnabledForFutureWorkouts();
   if (!state.workout.startedAt) state.workout.startedAt = Date.now();
@@ -676,8 +650,18 @@ function openSwapExercise() {
   openModal(`<div class="modal-heading"><div><span class="eyebrow">Exercise substitution</span><h2 id="modalTitle">Swap ${exercise.name}?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Alternatives preserve the movement purpose as closely as this home setup allows.</p><div class="choice-list">${(exercise.substitutes || []).map((sub,index) => `<button class="choice-button" data-substitute-index="${index}"><strong>${sub.name}</strong><span>${sub.note}</span></button>`).join('')}</div>`);
   modalContent.querySelectorAll('[data-substitute-index]').forEach(button => button.addEventListener('click', () => {
     const sub = exercise.substitutes[Number(button.dataset.substituteIndex)];
-    state.workout.substitutions[exercise.id] = sub.name;
-    closeModal(); renderWorkout(); showToast(`${exercise.name} swapped to ${sub.name}.`);
+    const sourceId = exercise.substitutionSourceExerciseId || exercise.id;
+    const template = getWorkoutTemplate(state.workout.snapshot.templateId);
+    const previous = state.workout.snapshot;
+    state.workout.supersededSnapshots.push(previous);
+    state.workout.substitutions[sourceId] = sub.id;
+    state.workout.snapshot = createWorkoutSnapshot({
+      template, programmeVersion:previous.programmeVersion, programmePhase:previous.programmePhase,
+      scheduleMode:previous.scheduleMode, equipment:previous.equipmentSnapshot,
+      pullUpRung:previous.pullUpAvailabilitySnapshot.rung, substitutions:state.workout.substitutions,
+      createdAt:previous.createdAt
+    });
+    closeModal(); renderWorkout(); showToast(`${exercise.name} swapped to ${sub.name} with its own prescription and identity.`);
   }));
 }
 
@@ -693,7 +677,7 @@ function activeWorkoutLabel() {
   if (!exercise) return 'Workout in progress';
   const completed = state.workout.completedSets[exercise.id] || [];
   if (state.workout.step === 'rest') return `${exercise.name} · Rest ${formatTime(state.workout.restRemaining)}`;
-  if (state.workout.step === 'exercise') return `${state.workout.substitutions[exercise.id] || exercise.name} · Set ${Math.min(completed.length + 1, exercise.sets)} of ${exercise.sets}`;
+  if (state.workout.step === 'exercise') return `${exercise.name} · Set ${Math.min(completed.length + 1, exercise.sets)} of ${exercise.sets}`;
   return `${exercise.name} · ${state.workout.step}`;
 }
 
@@ -705,7 +689,7 @@ function updateActiveWorkoutStrip() {
     strip = document.getElementById('activeWorkoutStrip');
     document.getElementById('resumeActiveWorkout')?.addEventListener('click', startWorkout);
   }
-  const visible = state.workout.active && !state.workout.finished && state.screen !== 'workout';
+  const visible = state.workout.active && state.screen !== 'workout';
   strip?.classList.toggle('hidden', !visible);
   const text = document.getElementById('activeWorkoutText');
   if (text) text.textContent = activeWorkoutLabel();
@@ -714,27 +698,32 @@ function updateActiveWorkoutStrip() {
 function injectWeeklyCoach() {
   if (document.getElementById('weeklyCoach')) return;
   const metrics = document.querySelector('[data-screen="progress"] .metric-strip');
-  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Keep the plan unchanged.</h2><p>Weight is stable, waist is slightly lower in the sample trend, and three exercises are progressing. There is no evidence-based reason to change food portions yet.</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence</button></section>`);
-  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">One recommendation, backed by the week.</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Workouts</span><strong>3 / 3</strong></div><div><span>Meals</span><strong>84%</strong></div><div><span>Readiness</span><strong>Mostly good</strong></div></div><div class="conflict-card"><strong>Keep the plan unchanged</strong><p>Weight is stable, waist is down 0.6 cm in this prototype scenario, and strength is moving. Review again next Sunday.</p></div><p>Waist measurement and reminder preferences are requested here after the first useful week—not before the user receives value.</p>`));
+  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Build real evidence first.</h2><p>No programme-specific trend is inferred from the remaining prototype display data. Recommendations will use persisted sessions in the next production-hardening phase.</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence rules</button></section>`);
+  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">No supported trend yet</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Domain sessions</span><strong>${state.completedWorkoutSnapshots.length}</strong></div><div><span>Calibration exercises</span><strong>${Object.keys(state.programme.calibrationByExerciseId).length}</strong></div><div><span>Silent changes</span><strong>Never</strong></div></div><div class="conflict-card"><strong>Evidence remains exercise-specific</strong><p>A future durable weekly review will use actual session, meal, readiness, and measurement records. Prototype cards are not treated as programme evidence.</p></div>`));
 }
 
 function renderWorkout() {
   const stage = document.getElementById('workoutStage');
   const progress = workoutProgress();
   const pullupsActive = pullupEnabledForCurrentWorkout();
+  const snapshot = state.workout.snapshot;
+  const template = snapshot ? getWorkoutTemplate(snapshot.templateId) : nextWorkoutTemplate();
+  const estimate = estimateWorkoutDuration(template);
+  const hasPullSlot = template.exercises.some(slot => slot.conditional === 'pull-up-availability');
   const topbarLabel = document.getElementById('workoutTopbarLabel');
-  if (topbarLabel) topbarLabel.textContent = pullupsActive ? 'FULL BODY C · VERTICAL PULL' : 'FULL BODY C · PULLOVER FALLBACK';
+  if (topbarLabel) topbarLabel.textContent = `${template.name.toUpperCase()}${hasPullSlot ? pullupsActive ? ' · VERTICAL PULL' : ' · PULLOVER FALLBACK' : ''}`;
   const base = `<div class="workout-progress-label"><span>${state.workout.step.toUpperCase()}</span><span>${progress}%</span></div><div class="workout-progress-track"><div class="workout-progress-fill" style="width:${progress}%"></div></div>`;
 
   if (state.workout.step === 'overview') {
-    stage.innerHTML = `<div class="workout-step">${base}<h1 class="workout-title">Full Body C</h1><p class="workout-copy">${pullupsActive ? 'The installed-and-confirmed pull-up bar unlocks your current progression rung.' : 'Your pull-up bar is not active yet, so this workout uses a dumbbell pullover. Pull-up history remains untouched.'}</p><div class="workout-overview-grid"><div><span>Duration</span><strong>45–50 min</strong></div><div><span>Exercises</span><strong>6</strong></div><div><span>Pull slot</span><strong>${pullupsActive ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div></div>${!pullupsActive ? `<div class="pullup-safety workout-equipment-note"><strong>Pull-ups locked</strong><p>Current bar status: ${pullupStatusLabel()}. Change it only after installation; an active workout will never be altered mid-session.</p><button class="workout-button" data-action="pullup-setup">Update bar status</button></div>` : ''}${readinessControls()}${restAlertControls()}<div class="workout-button-row"><button class="workout-button primary" data-workout-next="warmup">Begin warm-up</button><button class="workout-button" data-action="minimise-workout">Back to Today</button></div></div>`;
+    const copy = hasPullSlot ? pullupsActive ? 'The installed-and-confirmed pull-up bar resolved this immutable workout snapshot to your current progression rung.' : 'This snapshot uses dumbbell pullover because the pull-up bar was unavailable when the workout started. Pull-up history remains separate.' : `This ${template.phase === 'foundation' ? 'Foundation' : 'Lean Athletic'} workout was resolved from the versioned programme catalog.`;
+    stage.innerHTML = `<div class="workout-step">${base}<h1 class="workout-title">${template.name}</h1><p class="workout-copy">${copy}</p><div class="workout-overview-grid"><div><span>Estimated duration</span><strong>${estimate.minutes} min</strong></div><div><span>Exercises</span><strong>${template.exercises.length}</strong></div><div><span>Primary areas</span><strong>${template.primaryAreas.slice(0,3).join(', ')}</strong></div></div>${hasPullSlot && !pullupsActive ? `<div class="pullup-safety workout-equipment-note"><strong>Pull-ups unavailable in this snapshot</strong><p>Snapshot status: ${snapshot.pullUpAvailabilitySnapshot.status}. Equipment changes apply only to the next eligible workout.</p><button class="workout-button" data-action="pullup-setup">Update future bar status</button></div>` : ''}${readinessControls()}${restAlertControls()}<div class="workout-button-row"><button class="workout-button primary" data-workout-next="warmup">Begin warm-up</button><button class="workout-button" data-action="minimise-workout">Back to Today</button></div></div>`;
   }
 
   if (state.workout.step === 'warmup') {
     const warmups = [
       ['General movement','March, arm circles and easy bodyweight movement · 2 minutes'],
       ['Dynamic mobility','Hip hinges, reverse-lunge rehearsal and shoulder movement'],
-      ['Exercise rehearsal', pullupsActive ? 'Bodyweight reverse lunges + two scapular pull-up rehearsals' : 'Bodyweight reverse lunges + light pullover rehearsal'],
+      ['Exercise rehearsal', `Rehearse the first movement and ${hasPullSlot ? pullupsActive ? 'two scapular pull-up rehearsals' : 'a light pullover' : 'the main press or pull pattern'}`],
       ['Light warm-up set','Use the empty handles before working sets']
     ];
     stage.innerHTML = `<div class="workout-step">${base}<span class="eyebrow">Preparation</span><h1 class="workout-title">Warm up, then load.</h1><p class="workout-copy">The guidance is expanded in Weeks 1–2. The YouTube video is the primary follow-along resource; the written NHS guide remains available as a secondary reference.</p><a class="youtube-resource-card" href="${warmupResource.youtubeUrl}" target="_blank" rel="noopener noreferrer"><span class="youtube-play">▶</span><span><small>PRIMARY VIDEO · YOUTUBE</small><strong>${warmupResource.youtubeTitle}</strong><em>Open in YouTube ↗</em></span></a><div class="warmup-list">${warmups.map((item,i) => `<button class="warmup-item ${state.workout.warmup.has(i) ? 'complete' : ''}" data-warmup="${i}"><span class="warmup-number">${state.workout.warmup.has(i) ? '✓' : i+1}</span><span><strong>${item[0]}</strong><p>${item[1]}</p></span><b>${state.workout.warmup.has(i) ? 'Done' : 'Mark'}</b></button>`).join('')}</div><div class="workout-button-row"><a class="workout-button" href="${warmupResource.guideUrl}" target="_blank" rel="noopener noreferrer">Read ${warmupResource.guideSource} ↗</a><button class="workout-button primary" data-workout-next="form" ${state.workout.warmup.size < 4 ? 'disabled' : ''}>Continue to form guide</button></div></div>`;
@@ -766,7 +755,9 @@ function renderWorkout() {
   }
 
   if (state.workout.step === 'receipt') {
-    stage.innerHTML = `<div class="workout-step">${base}<div class="receipt"><div class="receipt-header"><div><span class="eyebrow">Workout receipt</span><h2>Full Body C</h2><p>Friday, 31 July · Week 1 calibration</p></div><div class="receipt-mark">✓</div></div><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Duration</span><strong>${formatTime(workoutElapsedSeconds())}</strong></div><div><span>Exercises</span><strong>6 / 6</strong></div><div><span>Sets</span><strong>19 / 19</strong></div><div><span>Session</span><strong>${state.workout.result}</strong></div><div><span>Progression</span><strong>Calibration saved</strong></div><div><span>Pull slot</span><strong>${pullupsActive ? pullupLevels.find(level => level.id === state.pullupLevel).short : 'Dumbbell pullover'}</strong></div><div><span>Next</span><strong>Workout A</strong></div></div><div class="receipt-dash"></div><button class="button button-primary full-width" data-action="finish-receipt">Return to Today</button></div></div>`;
+    const setCount = activeWorkoutExercises().reduce((sum, exercise) => sum + exercise.sets, 0);
+    const upcoming = nextRequiredWorkout({ scheduleMode:state.programme.scheduleMode, activeTemplateSetId:state.programme.activeTemplateSetId, lastCompletedTemplateId:snapshot.templateId });
+    stage.innerHTML = `<div class="workout-step">${base}<div class="receipt"><div class="receipt-header"><div><span class="eyebrow">Workout receipt</span><h2>${snapshot.workoutName}</h2><p>Programme Week ${state.programme.currentProgrammeWeek} · ${snapshot.programmePhase}</p></div><div class="receipt-mark">✓</div></div><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Duration</span><strong>${formatTime(workoutElapsedSeconds())}</strong></div><div><span>Exercises</span><strong>${snapshot.exercises.length} / ${snapshot.exercises.length}</strong></div><div><span>Sets</span><strong>${setCount} / ${setCount}</strong></div><div><span>Session</span><strong>${state.workout.result}</strong></div><div><span>Evidence</span><strong>Exercise IDs preserved</strong></div><div><span>Template</span><strong>${snapshot.templateId} v${snapshot.templateVersion}</strong></div><div><span>Next</span><strong>${getWorkoutTemplate(upcoming.templateId).name}</strong></div></div><div class="receipt-dash"></div><button class="button button-primary full-width" data-action="finish-receipt">Return to Today</button></div></div>`;
   }
 
   bindWorkoutActions();
@@ -777,13 +768,23 @@ function renderExercise(stage, base) {
   const exercise = currentWorkoutExercise();
   const completed = state.workout.completedSets[exercise.id] || [];
   const currentSet = Math.min(completed.length + 1, exercise.sets);
-  const substituted = state.workout.substitutions[exercise.id];
-  const displayName = substituted || exercise.name;
-  const pullupRung = exercise.id === 'pullup' ? pullupLevels.find(level => level.id === state.pullupLevel) : null;
+  const substituted = exercise.substitutionSourceExerciseId;
+  const displayName = exercise.name;
+  const pullupRung = substituted === 'pull-up-progression' && exercise.id !== 'dumbbell-pullover' ? pullupLevels.find(level => level.id === state.workout.snapshot.pullUpAvailabilitySnapshot.rung) : null;
   const displayLoad = pullupRung ? pullupRung.name : exercise.load;
   const displayTarget = pullupRung ? pullupRung.prescription : exercise.target;
   const configurationLabel = pullupRung ? 'Equipment + current rung' : 'Plate configuration';
-  stage.innerHTML = `<div class="workout-step">${base}<div class="exercise-header"><div><span class="eyebrow">Exercise ${state.workout.currentExercise + 1} of ${activeWorkoutExercises().length}</span><h1 class="exercise-title">${displayName}</h1><p>${exercise.sets} × ${displayTarget}</p>${pullupRung ? `<span class="exercise-mode-badge">Rung ${pullupRung.id} of 4</span>` : ''}${substituted ? `<div class="substitution-note">Substituted from ${exercise.name}; progression history remains separate in production.</div>` : ''}</div><div class="exercise-load"><strong>${displayLoad}</strong><span>${exercise.qualifier}</span></div></div><div class="exercise-context-strip"><div><small>Last time</small><strong>${exercise.last || 'No prior session'}</strong><span>Historical reference</span></div><div class="today"><small>Today</small><strong>${displayLoad} · Set ${currentSet}/${exercise.sets}</strong><span>${displayTarget}</span></div><div><small>Next eligible</small><strong>${exercise.next || 'Earn two clean sessions'}</strong><span>Never applied silently</span></div></div><div class="dark-load-panel"><span class="eyebrow">${configurationLabel}</span><h3>${exercise.plates}</h3><p>${exercise.cue}</p></div><div class="set-grid">${Array.from({length:exercise.sets},(_,i) => `<button class="set-button ${completed.includes(i+1) ? 'complete' : currentSet === i+1 ? 'current' : ''}" data-set="${i+1}">${completed.includes(i+1) ? '✓' : String(i+1).padStart(2,'0')}</button>`).join('')}</div><button class="current-set-action" data-complete-current="true">Complete set ${currentSet}</button><div class="exercise-footer-actions"><button class="text-button light" data-action="review-form">Review form</button>${exercise.id === 'pullup' ? '<button class="text-button light" data-action="choose-pullup-level">Change rung</button>' : '<button class="text-button light" data-action="swap-exercise">Swap exercise</button>'}<button class="text-button light" data-action="skip-set">Skip current set</button></div></div>`;
+  stage.innerHTML = `<div class="workout-step">${base}<div class="exercise-header"><div><span class="eyebrow">Exercise ${state.workout.currentExercise + 1} of ${activeWorkoutExercises().length}${exercise.optional ? ' · optional' : ''}</span><h1 class="exercise-title">${displayName}</h1><p>${exercise.sets} × ${displayTarget}</p>${pullupRung ? `<span class="exercise-mode-badge">Rung ${pullupRung.id} of 4</span>` : ''}${substituted ? `<div class="substitution-note">Resolved from ${getExercise(substituted).name}; ${exercise.name} keeps its own prescription and history identity.</div>` : ''}</div><div class="exercise-load"><strong>${displayLoad}</strong><span>${exercise.qualifier}</span></div></div><div class="exercise-context-strip"><div><small>Previous evidence</small><strong>Not started</strong><span>Keyed by ${exercise.id}</span></div><div class="today"><small>Today</small><strong>${displayLoad} · Set ${currentSet}/${exercise.sets}</strong><span>${displayTarget}</span></div><div><small>Progression</small><strong>Earn two controlled appearances</strong><span>Never applied silently</span></div></div><div class="dark-load-panel"><span class="eyebrow">${configurationLabel}</span><h3>${exercise.plates}</h3><p>${exercise.cue}</p></div><div class="set-grid">${Array.from({length:exercise.sets},(_,i) => `<button class="set-button ${completed.includes(i+1) ? 'complete' : currentSet === i+1 ? 'current' : ''}" data-set="${i+1}">${completed.includes(i+1) ? '✓' : String(i+1).padStart(2,'0')}</button>`).join('')}</div><button class="current-set-action" data-complete-current="true">Complete set ${currentSet}</button><div class="exercise-footer-actions"><button class="text-button light" data-action="review-form">Review form</button>${pullupRung ? '<button class="text-button light" data-action="choose-pullup-level">Change future rung</button>' : '<button class="text-button light" data-action="swap-exercise">Swap exercise</button>'}${exercise.optional ? '<button class="text-button light" data-action="skip-optional-exercise">Omit optional exercise</button>' : '<button class="text-button light" data-action="skip-set">Skip current set</button>'}</div></div>`;
+}
+
+function skipOptionalExercise() {
+  const exercise = currentWorkoutExercise();
+  if (!exercise?.optional) return;
+  if (state.workout.currentExercise < activeWorkoutExercises().length - 1) {
+    state.workout.currentExercise += 1; state.workout.step = 'form';
+  } else state.workout.step = 'result';
+  renderWorkout();
+  showToast(`${exercise.name} omitted; required workout completion is unaffected.`);
 }
 
 async function completeCurrentSet() {
@@ -797,7 +798,7 @@ async function completeCurrentSet() {
     renderWorkout();
     openCalibrationSheet();
   } else {
-    startRest(75);
+    startRest(exercise.restSeconds);
   }
 }
 
@@ -852,6 +853,12 @@ document.addEventListener('visibilitychange', () => {
 function handleCalibration(value) {
   const exercise = currentWorkoutExercise();
   state.workout.calibration[exercise.id] = value;
+  if (state.programme.currentProgrammeWeek <= 2) {
+    state.programme.calibrationByExerciseId = recordCalibration(state.programme.calibrationByExerciseId, {
+      exerciseId:exercise.id, exerciseVersion:getExercise(exercise.id).version, response:value,
+      workoutId:state.workout.snapshot.templateId
+    });
+  }
   state.formSeen[exercise.id] = (state.formSeen[exercise.id] || 0) + 1;
   state.workout.forceFullForm = false;
   if (state.workout.currentExercise < activeWorkoutExercises().length - 1) {
@@ -895,8 +902,8 @@ function bindWorkoutActions() {
   document.querySelectorAll('[data-session-result]').forEach(button => button.addEventListener('click', () => { state.workout.result = button.dataset.sessionResult; state.workout.step = 'receipt'; renderWorkout(); }));
   document.querySelectorAll('[data-action="finish-receipt"]').forEach(button => button.addEventListener('click', finishWorkout));
   document.querySelectorAll('[data-action="minimise-workout"]').forEach(button => button.addEventListener('click', minimiseWorkout));
-  document.querySelectorAll('[data-action="week-eight-review"]').forEach(button => button.addEventListener('click', weekEightReview));
-  document.querySelectorAll('[data-action="choose-track"]').forEach(button => button.addEventListener('click', chooseTrack));
+  document.querySelectorAll('[data-action="week-four-review"]').forEach(button => button.addEventListener('click', weekFourReview));
+  document.querySelectorAll('[data-action="choose-schedule"]').forEach(button => button.addEventListener('click', chooseSchedule));
   document.querySelectorAll('[data-action="preview-run"]').forEach(button => button.addEventListener('click', openRunOverview));
   document.querySelectorAll('[data-action="pullup-setup"]').forEach(button => button.addEventListener('click', pullupSetup));
   document.querySelectorAll('[data-action="choose-pullup-level"]').forEach(button => button.addEventListener('click', choosePullupLevel));
@@ -904,13 +911,34 @@ function bindWorkoutActions() {
   document.querySelectorAll('[data-action="swap-exercise"]').forEach(button => button.addEventListener('click', openSwapExercise));
   document.querySelectorAll('[data-action="choose-pullup-level"]').forEach(button => button.addEventListener('click', choosePullupLevel));
   document.querySelectorAll('[data-action="skip-set"]').forEach(button => button.addEventListener('click', () => showToast('Prototype note: a skipped set would create partial progression evidence.')));
+  document.querySelectorAll('[data-action="skip-optional-exercise"]').forEach(button => button.addEventListener('click', skipOptionalExercise));
 }
 
 function finishWorkout() {
-  state.workout.finished = true;
+  const completedSnapshot = state.workout.snapshot;
+  state.programme.lastCompletedRequiredTemplateId = state.workout.snapshot.templateId;
+  if (state.programme.activePhase === 'foundation') {
+    state.foundationEvidence.completedRequiredWorkouts += 1;
+    state.programme.currentProgrammeWeek = Math.min(
+      4 + state.programme.foundationExtensionWeeks,
+      Math.floor(state.foundationEvidence.completedRequiredWorkouts / 3) + 1
+    );
+  }
+  state.completedToday = true;
+  state.completedWorkoutSnapshots.push(completedSnapshot);
+  state.workout.finished = false;
   state.workout.active = false;
   state.workout.elapsedBeforePause = workoutElapsedSeconds();
   state.workout.startedAt = null;
+  state.workout.snapshot = null;
+  state.workout.step = 'overview';
+  state.workout.currentExercise = 0;
+  state.workout.completedSets = {};
+  state.workout.warmup = new Set();
+  state.workout.calibration = {};
+  state.workout.result = null;
+  state.workout.substitutions = {};
+  state.workout.supersededSnapshots = [];
   clearInterval(workoutTicker);
   showScreen('today');
   updateAll();
@@ -940,15 +968,13 @@ function recoveryDemo() {
 
 function progressionDemo() {
   openModal(`
-    <div class="modal-heading"><div><span class="eyebrow">Progression available</span><h2 id="modalTitle">Increase Romanian deadlift?</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
-    <p>You completed all prescribed sets comfortably in two consecutive eligible sessions.</p>
-    <div class="import-summary"><div><span>Current</span><strong>15 kg</strong></div><div><span>Proposed</span><strong>16 kg</strong></div><div><span>Change</span><strong>+6.7%</strong></div></div>
-    <div class="conflict-card"><strong>Add 0.5 kg to each side</strong><p>New configuration: 5 kg + 2.5 kg + 0.5 kg per side.</p></div>
-    <div class="modal-actions"><button class="button button-ghost" id="tempoInstead">Choose tempo instead</button><button class="button button-secondary" id="deferProgression">Keep current load</button><button class="button button-primary" id="acceptProgression">Accept for next session</button></div>
+    <div class="modal-heading"><div><span class="eyebrow">Progression rules</span><h2 id="modalTitle">Barbell Romanian deadlift · Not started</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
+    <p>No performance evidence has been recorded for this stable exercise ID.</p>
+    <div class="import-summary"><div><span>Exercise ID</span><strong>barbell-romanian-deadlift</strong></div><div><span>Successful appearances</span><strong>0 / 2</strong></div><div><span>Automatic increase</span><strong>Never</strong></div></div>
+    <div class="conflict-card"><strong>Conservative double progression</strong><p>Build controlled repetitions in range, then receive an achievable plate recommendation. Accept, defer, or reject it; no load changes silently.</p></div>
+    <div class="modal-actions"><button class="button button-primary" data-action="close-modal">Understood</button></div>
   `);
-  document.getElementById('acceptProgression').addEventListener('click', () => { closeModal(); showToast('16 kg accepted for the next appearance.'); });
-  document.getElementById('deferProgression').addEventListener('click', () => { closeModal(); showToast('Current load retained. No failure recorded.'); });
-  document.getElementById('tempoInstead').addEventListener('click', () => { closeModal(); tempoDemo(); });
+  modalContent.querySelectorAll('[data-action="close-modal"]').forEach(button => button.addEventListener('click', closeModal));
 }
 function tempoDemo() {
   openModal(`
@@ -965,7 +991,10 @@ function exportDemo() {
     feeling: state.feeling,
     weight: state.weight,
     workout: { finished: state.workout.finished, result: state.workout.result },
-    programme: { block: state.block, track: state.longTermTrack, pullupLevel: state.pullupLevel, equipment: state.equipment },
+    programme: state.programme,
+    equipment: state.equipment,
+    pullupLevel: state.pullupLevel,
+    workoutSnapshot: state.workout.snapshot,
     run: state.run,
     note: 'Prototype export. Production records and integrity checks are not implemented.'
   };
@@ -1022,8 +1051,8 @@ function renderPullupSafetyConfirmation() {
   boxes.forEach(box => box.addEventListener('change', refresh));
   document.getElementById('cancelPullupActivation')?.addEventListener('click', closeModal);
   confirm?.addEventListener('click', () => {
-    state.equipment.pullupBarStatus = 'installed-available';
-    state.equipment.pullupSafetyConfirmed = true;
+    state.equipment.pullUpBarStatus = 'installed-available';
+    state.equipment.pullUpSafetyConfirmed = true;
     closeModal(); updateLongTermUI();
     showToast(state.workout.active ? 'Pull-ups enabled for the next Workout C. The current workout is unchanged.' : 'Pull-up progression enabled for your next Workout C.');
   });
@@ -1032,30 +1061,49 @@ function renderPullupSafetyConfirmation() {
 function pullupSetup() {
   const current = pullupStatusLabel();
   const enabled = pullupEnabledForFutureWorkouts();
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up bar status</span><h2 id="modalTitle">Use what is actually available</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Pull-up programming appears only when the bar is installed, available and safety-confirmed. Otherwise, Workout C uses a dumbbell pullover.</p><div class="import-summary"><div><span>Current status</span><strong>${current}</strong></div><div><span>Workout C now</span><strong>${enabled ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div><div><span>Pull-up history</span><strong>${enabled ? 'Active' : 'Paused, not reset'}</strong></div></div><div class="equipment-status-grid modal-equipment-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="choice-button ${state.equipment.pullupBarStatus === value ? 'selected-equipment-status' : ''}" data-pullup-status="${value}"><strong>${label}</strong><span>${value === 'installed-available' ? 'Complete safety confirmation to activate' : value === 'temporarily-unavailable' ? 'Use the fallback without resetting pull-up progress' : value === 'owned-not-installed' ? 'Default until installation' : 'Keep pull-up programming locked'}</span></button>`).join('')}</div><div class="choice-list"><a class="choice-button" href="https://www.youtube.com/watch?v=aNUSgyWRJYA" target="_blank" rel="noopener noreferrer"><strong>Beginner pull-up tutorial</strong><span>FitnessFAQs · YouTube ↗</span></a>${enabled ? '<button class="choice-button" data-action="choose-pullup-level"><strong>Change progression rung</strong><span>Start with what you can control</span></button>' : ''}</div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up bar status</span><h2 id="modalTitle">Use what is actually available</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Pull-up programming appears only when the bar is installed, available and safety-confirmed. Otherwise, Workout C uses a dumbbell pullover.</p><div class="import-summary"><div><span>Current status</span><strong>${current}</strong></div><div><span>Workout C now</span><strong>${enabled ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div><div><span>Pull-up history</span><strong>${enabled ? 'Active' : 'Paused, not reset'}</strong></div></div><div class="equipment-status-grid modal-equipment-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="choice-button ${state.equipment.pullUpBarStatus === value ? 'selected-equipment-status' : ''}" data-pullup-status="${value}"><strong>${label}</strong><span>${value === 'installed-available' ? 'Complete safety confirmation to activate' : value === 'temporarily-unavailable' ? 'Use the fallback without resetting pull-up progress' : value === 'owned-not-installed' ? 'Default until installation' : 'Keep pull-up programming locked'}</span></button>`).join('')}</div><div class="choice-list"><a class="choice-button" href="https://www.youtube.com/watch?v=aNUSgyWRJYA" target="_blank" rel="noopener noreferrer"><strong>Beginner pull-up tutorial</strong><span>FitnessFAQs · YouTube ↗</span></a>${enabled ? '<button class="choice-button" data-action="choose-pullup-level"><strong>Change progression rung</strong><span>Start with what you can control</span></button>' : ''}</div>`);
   modalContent.querySelectorAll('[data-pullup-status]').forEach(button => button.addEventListener('click', () => {
     const value = button.dataset.pullupStatus;
     if (value === 'installed-available') { closeModal(); renderPullupSafetyConfirmation(); return; }
-    state.equipment.pullupBarStatus = value;
-    state.equipment.pullupSafetyConfirmed = false;
+    state.equipment.pullUpBarStatus = value;
+    state.equipment.pullUpSafetyConfirmed = false;
     closeModal(); updateLongTermUI();
     showToast(value === 'temporarily-unavailable' ? 'Pull-up progress paused. Workout C will use dumbbell pullovers.' : `${pullupStatusLabels[value]}. Pull-up workouts remain locked.`);
   }));
   modalContent.querySelector('[data-action="choose-pullup-level"]')?.addEventListener('click', () => { closeModal(); choosePullupLevel(); });
 }
 
-function chooseTrack() {
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">After Week 8</span><h2 id="modalTitle">Choose the next emphasis</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Your history remains continuous. The track changes the next block’s balance, not your identity or past records.</p><div class="track-grid">${trainingTracks.map(track => `<button class="track-card ${track.recommended ? 'recommended' : ''}" data-track="${track.name}"><small>${track.recommended ? 'RECOMMENDED FOR YOU' : 'ALTERNATIVE TRACK'}</small><h3>${track.name}</h3><p>${track.goal}</p><strong>${track.strength} strength · ${track.running}</strong></button>`).join('')}</div>`);
-  modalContent.querySelectorAll('[data-track]').forEach(button => button.addEventListener('click', () => {
-    state.longTermTrack = button.dataset.track;
-    closeModal(); updateLongTermUI(); showToast(`${state.longTermTrack} selected for the next block.`);
-  }));
+function applyScheduleChoice(choice) {
+  if (choice === state.programme.scheduleMode) { closeModal(); showToast('That schedule mode is already active.'); return; }
+  if (choice === 'extend-one-week' || choice === 'extend-two-weeks') {
+    const reviewWithDecision = { ...state.programme.weekFourReview, userDecision:choice };
+    state.programme = applyFoundationExtension({ ...state.programme, weekFourReview:reviewWithDecision }, choice === 'extend-one-week' ? 1 : 2);
+    closeModal(); updateAll(); showToast(`Foundation extended by ${state.programme.foundationExtensionWeeks} week${state.programme.foundationExtensionWeeks === 1 ? '' : 's'}; A → B → C and all evidence continue.`); return;
+  }
+  const leavingFoundation = state.programme.activePhase === 'foundation';
+  const transition = createProgrammeTransition(state.programme, choice, leavingFoundation ? 'week-four-user-decision' : 'user-schedule-change');
+  state.programme = applyProgrammeTransition(state.programme, transition);
+  if (leavingFoundation) state.programme.currentProgrammeWeek = 5 + state.programme.foundationExtensionWeeks;
+  state.programme.weekFourReview = { ...state.programme.weekFourReview, userDecision:choice };
+  closeModal(); updateAll(); showToast(`${choice === 'lean-athletic-four-day' ? 'Four-day' : 'Permanent three-day'} Lean Athletic will begin with the next workout.`);
 }
 
-function weekEightReview() {
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Block 1 review</span><h2 id="modalTitle">Eight weeks of evidence, not a transformation promise</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Strength sessions</span><strong>23 / 24</strong></div><div><span>Pull-up work</span><strong>${pullupEnabledForFutureWorkouts() ? pullupLevels.find(x => x.id === state.pullupLevel).short : 'Not activated'}</strong></div><div><span>Easy runs</span><strong>5 complete</strong></div></div><div class="review-physique"><strong>Realistic visual check</strong><ul><li>Slightly rounder shoulders and firmer arms/chest</li><li>Stronger-looking upper back from rows and ${pullupEnabledForFutureWorkouts() ? 'pull-up progression' : 'dumbbell pullovers'}</li><li>Firmer thighs and glutes</li><li>Waist stable or modestly smaller—not an automatic six-pack</li><li>You still look like yourself, but visibly more trained</li></ul></div><div class="block-two-preview"><div><span>Recommended track</span><strong>${state.longTermTrack}</strong></div><div><span>Block 2 pull slot</span><strong>${pullupEnabledForFutureWorkouts() ? 'Up to 2 pull-up exposures weekly' : 'Pullover fallback until installation'}</strong></div><div><span>Running</span><strong>1 easy run, optional second later</strong></div></div><div class="conflict-card"><strong>Recommendation: begin Block 2 without changing calories yet</strong><p>In this sample review, weight is up slowly, waist is controlled, strength is progressing and running recovery is acceptable.</p></div><div class="modal-actions"><button class="button button-secondary" id="reviewChooseTrack">Change track</button><button class="button button-primary" id="acceptBlockTwo">Accept Block 2 preview</button></div>`);
-  document.getElementById('reviewChooseTrack')?.addEventListener('click', () => { closeModal(); chooseTrack(); });
-  document.getElementById('acceptBlockTwo')?.addEventListener('click', () => { state.block.nextAccepted = true; closeModal(); updateLongTermUI(); showToast('Block 2 preview accepted. Production would schedule it after Week 8.'); });
+function chooseSchedule() {
+  const canTransition = state.programme.activePhase !== 'foundation' || state.programme.weekFourReview?.available;
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Schedule mode</span><h2 id="modalTitle">Choose the frequency that fits your life</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Switching schedule mode preserves history, exercise progression, measurements, and any active workout snapshot.</p><div class="track-grid"><button class="track-card recommended" data-schedule-choice="lean-athletic-four-day" ${canTransition ? '' : 'disabled'}><small>DEFAULT RECOMMENDATION</small><h3>Four-day Lean Athletic</h3><p>Lower A → Upper A → Lower B → Upper B</p><strong>4 required strength days + optional E</strong></button><button class="track-card" data-schedule-choice="lean-athletic-three-day" ${canTransition ? '' : 'disabled'}><small>PERMANENT FALLBACK</small><h3>Three-day Lean Athletic</h3><p>Full Body A → B → C</p><strong>3 required strength days</strong></button></div>${canTransition ? '' : '<div class="conflict-card"><strong>Comparison only for now</strong><p>The Foundation transition becomes available with the end-of-Week-4 review.</p></div>'}`);
+  modalContent.querySelectorAll('[data-schedule-choice]').forEach(button => button.addEventListener('click', () => { if (!button.disabled) applyScheduleChoice(button.dataset.scheduleChoice); }));
+}
+
+function weekFourReview() {
+  const review = foundationReadinessReview({ currentProgrammeWeek:state.programme.currentProgrammeWeek, ...state.foundationEvidence });
+  state.programme.weekFourReview = review;
+  if (!review.available) {
+    openModal(`<div class="modal-heading"><div><span class="eyebrow">Foundation readiness review</span><h2 id="modalTitle">Available at the end of Week 4</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This review is deterministic and uses completed required workouts, calibration coverage, reported confidence, discomfort, energy, sleep, soreness, recovery, and four-day feasibility.</p><div class="conflict-card"><strong>Current status: Week ${state.programme.currentProgrammeWeek}</strong><p>Four weeks is the default calibration period. Form practice continues throughout the programme.</p></div>`); return;
+  }
+  const labels = { ready:'Ready to choose the next schedule', 'extend-one-week':'Consider one more Foundation week', 'extend-two-weeks':'Consider two more Foundation weeks' };
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">System recommendation</span><h2 id="modalTitle">${labels[review.recommendation]}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This is not a medical assessment and does not claim to evaluate technique through the screen.</p><div class="import-summary"><div><span>Required sessions</span><strong>${review.completedRequiredWorkouts} / ${review.plannedRequiredWorkouts}</strong></div><div><span>Recommendation</span><strong>${review.recommendation}</strong></div><div><span>User decision</span><strong>Not chosen</strong></div></div><div class="conflict-card"><strong>Why</strong><p>${review.reasons.join(' ')}</p></div><div class="modal-actions"><button class="button button-ghost" data-review-choice="extend-two-weeks">Extend 2 weeks</button><button class="button button-secondary" data-review-choice="extend-one-week">Extend 1 week</button><button class="button button-primary" data-action="choose-schedule">Choose Lean Athletic schedule</button></div>`);
+  modalContent.querySelectorAll('[data-review-choice]').forEach(button => button.addEventListener('click', () => applyScheduleChoice(button.dataset.reviewChoice)));
+  modalContent.querySelector('[data-action="choose-schedule"]')?.addEventListener('click', () => { closeModal(); chooseSchedule(); });
 }
 
 function updateLongTermUI() {
@@ -1072,9 +1120,9 @@ function updateLongTermUI() {
   if (pathButton) pathButton.textContent = enabled ? 'Change current rung' : 'Set up pull-up bar';
   const path = document.querySelector('.pullup-mini-path');
   if (path) path.classList.toggle('locked-path', !enabled);
-  document.querySelectorAll('[data-selected-track]').forEach(el => el.textContent = state.longTermTrack);
   const blockTwoStatus = document.getElementById('blockTwoStatus');
-  if (blockTwoStatus) blockTwoStatus.textContent = state.block.nextAccepted ? 'ACCEPTED' : 'NEXT';
+  if (blockTwoStatus) blockTwoStatus.textContent = state.programme.activePhase === 'lean-athletic' ? 'ACTIVE' : 'NEXT';
+  updateProgrammeUI();
 }
 
 let runUiTicker = null;
@@ -1458,8 +1506,8 @@ function bindGlobalActions() {
   document.querySelectorAll('[data-action="import-demo"]').forEach(button => button.addEventListener('click', importDemo));
   document.querySelectorAll('[data-action="end-workout-menu"]').forEach(button => button.addEventListener('click', recoveryDemo));
   document.querySelectorAll('[data-action="minimise-workout"]').forEach(button => button.addEventListener('click', minimiseWorkout));
-  document.querySelectorAll('[data-action="week-eight-review"]').forEach(button => button.addEventListener('click', weekEightReview));
-  document.querySelectorAll('[data-action="choose-track"]').forEach(button => button.addEventListener('click', chooseTrack));
+  document.querySelectorAll('[data-action="week-four-review"]').forEach(button => button.addEventListener('click', weekFourReview));
+  document.querySelectorAll('[data-action="choose-schedule"]').forEach(button => button.addEventListener('click', chooseSchedule));
   document.querySelectorAll('[data-action="preview-run"]').forEach(button => button.addEventListener('click', openRunOverview));
   document.querySelectorAll('[data-action="pullup-setup"]').forEach(button => button.addEventListener('click', pullupSetup));
   document.querySelectorAll('[data-action="choose-pullup-level"]').forEach(button => button.addEventListener('click', choosePullupLevel));
@@ -1478,6 +1526,7 @@ injectWeeklyCoach();
 updateActiveWorkoutStrip();
 updateActiveRunStrip();
 updateLongTermUI();
+updateProgrammeUI();
 setTheme('dark');
 renderOnboarding();
 renderMeals();

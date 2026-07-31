@@ -59,15 +59,17 @@
             <header class="editorial-hero">
               <div class="hero-meta">
                 <span>FRIDAY · 31 JULY</span>
-                <span>WEEK 1 · CALIBRATION</span>
+                <span id="todayProgrammeMeta">WEEK 1 · FOUNDATION · THREE-DAY</span>
               </div>
-              <h1>Full Body C</h1>
-              <p class="hero-subtitle">45–50 minutes · 6 exercises · form guidance is expanded this week.</p>
+              <h1 id="todayWorkoutName">Full Body A</h1>
+              <p class="hero-subtitle" id="todayWorkoutSummary">Foundation · versioned workout preview loading.</p>
               <div class="hero-actions">
                 <button class="button button-primary button-large" data-action="start-workout">Start workout</button>
                 <button class="button button-ghost" data-action="open-recovery-demo">Preview recovery flow</button>
               </div>
             </header>
+
+            <section class="progression-card" id="todayWorkoutPreview" aria-label="Next workout preview"></section>
 
             <section class="proof-line-section" aria-labelledby="proof-line-title">
               <div class="section-heading-row">
@@ -99,7 +101,7 @@
               <div class="action-list">
                 <button class="action-row" data-action="start-workout">
                   <span class="action-index">01</span>
-                  <span class="action-copy"><strong>Complete Full Body C</strong><small>Next: reverse lunges · 5 kg per dumbbell</small></span>
+                  <span class="action-copy"><strong id="todayWorkoutAction">Complete Full Body A</strong><small id="todayWorkoutFirstExercise">Next: Goblet squat · calibrate load</small></span>
                   <span class="action-state" id="workoutState">Start</span>
                 </button>
                 <button class="action-row" data-go="plan">
@@ -135,13 +137,13 @@
 
             <section class="context-panel next-load-panel">
               <span class="eyebrow">Progression watch</span>
-              <h3>Romanian deadlift</h3>
+              <h3>Exercise-specific evidence</h3>
               <div class="load-pair">
-                <div><small>Current</small><strong>15 kg</strong></div>
+                <div><small>Current</small><strong>Not started</strong></div>
                 <span class="load-arrow">→</span>
-                <div><small>Next</small><strong>16 kg</strong></div>
+                <div><small>Next</small><strong>Not eligible</strong></div>
               </div>
-              <p>One more successful appearance before this increase becomes available.</p>
+              <p>Recommendations appear only after controlled performances are recorded against a stable exercise ID.</p>
               <button class="button button-secondary full-width" data-go="progress">Review progression</button>
             </section>
 
@@ -173,13 +175,10 @@
 
             <div id="weekPlanView" class="week-programme hidden">
               <div class="programme-spine">
-                <article class="programme-day complete"><span>MON</span><div><strong>Full Body A</strong><small>Completed · 46 min</small></div><b>✓</b></article>
-                <article class="programme-day rest"><span>TUE</span><div><strong>Recovery</strong><small>Meals + check-in completed</small></div><b>✓</b></article>
-                <article class="programme-day complete"><span>WED</span><div><strong>Full Body B</strong><small>Completed · 49 min</small></div><b>✓</b></article>
-                <article class="programme-day rest"><span>THU</span><div><strong>Recovery</strong><small>30-minute walk</small></div><b>✓</b></article>
-                <article class="programme-day current"><span>FRI</span><div><strong>Full Body C</strong><small>Scheduled · 6:30 PM</small></div><b>NOW</b></article>
-                <article class="programme-day run"><span>SAT</span><div><strong>Run–walk foundation</strong><small>Starts Week 3 · 5-min warm-up · 1 min easy / 2 min brisk × 6 · cool-down</small></div><b>RUN</b></article>
-                <article class="programme-day rest"><span>SUN</span><div><strong>Recovery</strong><small>Meals + weekly reflection</small></div><b>—</b></article>
+                <article class="programme-day current"><span>A</span><div><strong>Full Body A</strong><small>Required · squat, press, hinge, row, shoulders, core</small></div><b>01</b></article>
+                <article class="programme-day"><span>B</span><div><strong>Full Body B</strong><small>Required · deadlift, split squat, overhead press, row, push-up, core</small></div><b>02</b></article>
+                <article class="programme-day"><span>C</span><div><strong>Full Body C</strong><small>Required · conditional pull-up progression or dumbbell pullover</small></div><b>03</b></article>
+                <article class="programme-day run"><span>E</span><div><strong>Optional conditioning or recovery</strong><small>Run–walk, brisk walk, or mobility · never gates strength completion</small></div><b>OPT</b></article>
               </div>
               <button class="button button-secondary full-width run-preview-button" data-action="preview-run">Preview first run</button>
             </div>
@@ -187,19 +186,20 @@
             <div id="blockPlanView" class="block-plan hidden">
               <header class="block-plan-hero">
                 <span class="eyebrow">Training year</span>
-                <h2>Eight weeks is the first chapter.</h2>
-                <p>Six connected blocks preserve your strength history while changing volume, exercises and running exposure.</p><span class="status-pill success block-track-pill">TRACK · <span data-selected-track>Lean Athletic</span></span>
+                <h2>Four weeks to calibrate, then choose.</h2>
+                <p>Foundation establishes safe, repeatable exercise evidence. The Week 4 review recommends a next step; the user decides.</p><span class="status-pill success block-track-pill">PROGRAMME v1</span>
               </header>
               <div class="block-rail" id="blockRail">
-                <article class="training-block current"><span>01</span><div><small>Weeks 1–8</small><h3>Foundation</h3><p>Technique, calibration, three strength days, pull-up entry work when installed—or a pullover fallback—and one easy run from Week 3.</p></div><b>NOW</b></article>
-                <article class="training-block"><span>02</span><div><small>Weeks 9–16</small><h3>Muscle-building base</h3><p>Up to two pull-up exposures when installed, more upper-back and shoulder volume, one easy run.</p></div><b id="blockTwoStatus">NEXT</b></article>
-                <article class="training-block"><span>03</span><div><small>Weeks 17–24</small><h3>Lean athletic</h3><p>Three strength sessions, one to two runs and stronger unilateral work.</p></div><b>03</b></article>
+                <article class="training-block current"><span>01</span><div><small>Weeks 1–4 by default</small><h3>Foundation and Calibration</h3><p>Full Body A → B → C, three required strength sessions, and one optional recovery session.</p></div><b>NOW</b></article>
+                <article class="training-block"><span>↺</span><div><small>Optional Week 5 or Weeks 5–6</small><h3>Foundation extension</h3><p>Continue the rotation without resetting history; re-evaluate the latest evidence.</p></div><b>CHOICE</b></article>
+                <article class="training-block"><span>02</span><div><small>Begins Week 5 when ready</small><h3>Lean Athletic Base</h3><p>Lower A → Upper A → Lower B → Upper B, plus optional E. Permanent three-day mode remains available.</p></div><b id="blockTwoStatus">NEXT</b></article>
+                <article class="training-block"><span>03</span><div><small>Later blocks</small><h3>Lean Athletic development</h3><p>The four-day structural foundation may continue; unapproved detailed prescriptions are not invented.</p></div><b>03–06</b></article>
                 <article class="training-block"><span>04</span><div><small>Weeks 25–32</small><h3>Strength emphasis</h3><p>Lower rep priorities where equipment permits, longer rests, easy running maintained.</p></div><b>04</b></article>
                 <article class="training-block"><span>05</span><div><small>Weeks 33–40</small><h3>Physique emphasis</h3><p>Shoulders, lats, upper chest, arms and lower-body weak points identified from your data.</p></div><b>05</b></article>
                 <article class="training-block"><span>06</span><div><small>Weeks 41–48</small><h3>Hybrid consolidation</h3><p>Hold muscle and strength while becoming a more capable runner.</p></div><b>06</b></article>
                 <article class="training-block review"><span>↺</span><div><small>Weeks 49–52</small><h3>Review and reset</h3><p>Lighter training, annual comparison and selection of the next year’s emphasis.</p></div><b>YEAR</b></article>
               </div>
-              <div class="button-row"><button class="button button-primary" data-action="week-eight-review">Preview Week 8 review</button><button class="button button-ghost" data-action="choose-track">Choose long-term track</button></div>
+              <div class="button-row"><button class="button button-primary" data-action="week-four-review">Preview Week 4 review</button><button class="button button-ghost" data-action="choose-schedule">Compare four- and three-day modes</button></div>
             </div>
           </div>
 
@@ -220,6 +220,16 @@
               <p id="pullupEquipmentCopy">Workout C uses a dumbbell pullover until installation and safety confirmation.</p>
               <button class="button button-secondary full-width" id="pullupEquipmentButton" data-action="pullup-setup">Update pull-up bar status</button>
             </section>
+            <section class="context-panel">
+              <span class="eyebrow">Barbell role</span>
+              <h3>Bilateral home strength</h3>
+              <p>Romanian and conventional deadlifts, floor press, bent-over row, glute bridge, and first-class barbell curl.</p>
+            </section>
+            <section class="context-panel">
+              <span class="eyebrow">Dumbbell role</span>
+              <h3>Unilateral work and accessories</h3>
+              <p>Squats, lunges, split squats, rows, presses, raises, pullovers, arms, and calf work—without a bench or rack.</p>
+            </section>
           </aside>
         </div>
       </section>
@@ -229,7 +239,7 @@
           <div class="primary-column">
             <header class="page-heading">
               <div><span class="eyebrow">Progress</span><h1>What is actually changing</h1></div>
-              <span class="status-pill neutral">Block 1 · Week 1 of 8</span>
+              <span class="status-pill neutral">Foundation · Week 1 of 4</span>
             </header>
 
             <section class="insight-banner">
@@ -241,56 +251,48 @@
             <section class="metric-strip">
               <div><small>Weight</small><strong>69.8 kg</strong><span>4-week avg 69.4</span></div>
               <div><small>Waist</small><strong>84.0 cm</strong><span>Baseline</span></div>
-              <div><small>Workouts</small><strong>2 / 3</strong><span>This week</span></div>
+              <div><small>Domain workouts</small><strong>0</strong><span>Not started</span></div>
               <div><small>Meals</small><strong id="progressMealAdherence">0%</strong><span>Today</span></div>
             </section>
 
             <section class="year-transition-card">
               <div>
-                <span class="eyebrow">End-of-block transition</span>
-                <h2>Week 8 should decide what happens next.</h2>
-                <p>The review compares strength, pull-up rung, running tolerance, weight, waist, meals and readiness—then offers one next-block recommendation.</p>
+                <span class="eyebrow">Foundation readiness review</span>
+                <h2>Week 4 informs the next choice.</h2>
+                <p>The deterministic review considers required sessions, calibration, confidence, discomfort, recovery, and four-day feasibility. It is not a technique or medical assessment.</p>
               </div>
               <div class="year-transition-actions">
-                <button class="button button-primary" data-action="week-eight-review">Open Week 8 review</button>
-                <button class="button button-secondary" data-action="choose-track">Preview track choice</button>
+                <button class="button button-primary" data-action="week-four-review">Preview Week 4 review</button>
+                <button class="button button-secondary" data-action="choose-schedule">Compare schedule modes</button>
               </div>
             </section>
 
             <section class="progression-card">
               <div class="section-heading-row">
-                <div><span class="eyebrow">Week 3 preview</span><h2>Progression recommendation</h2></div>
-                <span class="status-pill effort">Needs one more success</span>
+                <div><span class="eyebrow">Exercise catalog</span><h2>Barbell Romanian deadlift</h2></div>
+                <span class="status-pill neutral">Not started</span>
               </div>
               <div class="plate-comparison">
                 <div class="plate-side">
-                  <small>Current plate-only load</small>
-                  <strong>15 kg</strong>
-                  <div class="barbell-diagram" aria-label="Current barbell: five kilogram and two point five kilogram plate on each side">
-                    <div class="plates left"><span class="plate p5">5</span><span class="plate p25">2.5</span></div>
-                    <div class="bar"></div>
-                    <div class="plates right"><span class="plate p25">2.5</span><span class="plate p5">5</span></div>
-                  </div>
-                  <p>5 kg + 2.5 kg per side</p>
+                  <small>Current load</small>
+                  <strong>Not calibrated</strong>
+                  <div class="barbell-diagram" aria-label="No current load configured"><div class="bar"></div></div>
+                  <p>No performance evidence recorded.</p>
                 </div>
-                <div class="change-chip">+1 kg</div>
+                <div class="change-chip">→</div>
                 <div class="plate-side next">
-                  <small>Next balanced load</small>
-                  <strong>16 kg</strong>
-                  <div class="barbell-diagram" aria-label="Next barbell: five kilogram, two point five kilogram and zero point five kilogram plate on each side">
-                    <div class="plates left"><span class="plate p5">5</span><span class="plate p25">2.5</span><span class="plate p05 added">.5</span></div>
-                    <div class="bar"></div>
-                    <div class="plates right"><span class="plate p05 added">.5</span><span class="plate p25">2.5</span><span class="plate p5">5</span></div>
-                  </div>
-                  <p>5 kg + 2.5 kg + 0.5 kg per side</p>
+                  <small>Next recommendation</small>
+                  <strong>Not eligible</strong>
+                  <div class="barbell-diagram" aria-label="No next load recommended"><div class="bar"></div></div>
+                  <p>Requires exercise-specific controlled appearances.</p>
                 </div>
               </div>
               <div class="recommendation-reason">
-                <strong>Why it is not active yet</strong>
-                <p>Calibration completes in Week 2. From Week 3, two qualifying appearances are required. Two challenging completions require a third success.</p>
+                <strong>No invented progression evidence</strong>
+                <p>Weeks 1–2 collect too light, appropriate, or too heavy responses. Later recommendations require controlled appearances and user confirmation.</p>
               </div>
               <div class="button-row">
-                <button class="button button-primary" data-action="preview-progression">Preview decision flow</button>
+                <button class="button button-primary" data-action="preview-progression">View decision rules</button>
                 <button class="button button-ghost" data-action="show-tempo">See tempo alternative</button>
               </div>
             </section>
@@ -331,8 +333,8 @@
             <div class="history-list">
               <article class="history-entry">
                 <div class="history-date"><strong>29</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Workout B</span><h3>Full Body B</h3><p>49:08 · 6 exercises · 18 sets</p></div>
-                <span class="status-pill success">Complete</span>
+                <div><span class="eyebrow">Prototype example</span><h3>Full Body B</h3><p>Legacy demonstration record · not programme evidence</p></div>
+                <span class="status-pill neutral">Demo</span>
               </article>
               <article class="history-entry">
                 <div class="history-date"><strong>28</strong><span>JUL</span></div>
@@ -346,8 +348,8 @@
               </article>
               <article class="history-entry partial">
                 <div class="history-date"><strong>26</strong><span>JUL</span></div>
-                <div><span class="eyebrow">Workout D</span><h3>Optional conditioning</h3><p>18:42 · stopped after conditioning</p></div>
-                <span class="status-pill effort">Partial</span>
+                <div><span class="eyebrow">Prototype example</span><h3>Optional conditioning</h3><p>Legacy demonstration record · not programme evidence</p></div>
+                <span class="status-pill neutral">Demo</span>
               </article>
             </div>
           </div>
@@ -356,7 +358,7 @@
               <span class="eyebrow">Selected receipt</span>
               <h3>Full Body B</h3>
               <div class="receipt-rule"></div>
-              <dl><div><dt>Duration</dt><dd>49:08</dd></div><div><dt>Session</dt><dd>Challenging</dd></div><div><dt>Progression</dt><dd>1 success</dd></div><div><dt>Next</dt><dd>Workout C</dd></div></dl>
+              <dl><div><dt>Status</dt><dd>Legacy demo</dd></div><div><dt>Programme evidence</dt><dd>Not used</dd></div><div><dt>Migration</dt><dd>Next phase</dd></div></dl>
             </section>
           </aside>
         </div>
@@ -416,7 +418,7 @@
       <section class="screen workout-screen" data-screen="workout">
         <div class="workout-topbar">
           <button class="icon-button dark" data-action="minimise-workout" aria-label="Minimise workout">↓</button>
-          <div><span class="eyebrow" id="workoutTopbarLabel">FULL BODY C · PULLOVER FALLBACK</span><strong id="workoutElapsed">00:00</strong></div>
+          <div><span class="eyebrow" id="workoutTopbarLabel">VERSIONED WORKOUT</span><strong id="workoutElapsed">00:00</strong></div>
           <button class="text-button light" data-action="end-workout-menu">End</button>
         </div>
 

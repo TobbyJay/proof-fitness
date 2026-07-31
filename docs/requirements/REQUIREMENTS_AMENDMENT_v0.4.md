@@ -1,5 +1,7 @@
 # Prototype v0.4 — Long-term Training, Running and Pull-up Expansion
 
+> Historical amendment: the eight-week Foundation and Week 8 transition below are obsolete. Programme domain v1 supersedes them with a four-week Foundation, an end-of-Week-4 readiness review, optional one/two-week extensions, and Lean Athletic beginning in Week 5 when chosen. The twelve-month review/reset concept remains preserved. See `../PROGRAMME_DOMAIN.md`.
+
 This amendment records the approved expansion from an eight-week tracker into a long-term home-training system.
 
 ## Programme model

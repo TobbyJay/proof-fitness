@@ -8,6 +8,16 @@ const requiredFiles = [
   'src/app.js',
   'src/run-phase.js',
   'src/styles.css',
+  'src/domain/exercises/exerciseCatalog.js',
+  'src/domain/programmes/programmeCatalog.js',
+  'src/domain/programmes/foundationProgramme.js',
+  'src/domain/programmes/leanAthleticProgramme.js',
+  'src/domain/programmes/threeDayFallback.js',
+  'src/domain/workouts/createWorkoutSnapshot.js',
+  'src/domain/reviews/foundationReadinessReview.js',
+  'scripts/validate-programme-domain.mjs',
+  'docs/PROGRAMME_DOMAIN.md',
+  'docs/EXERCISE_CATALOG.md',
   'audio-scripts/starter-run.json',
   'audio-scripts/phrase-library.json',
   'config/audio-coach.json',
@@ -41,5 +51,21 @@ for (const reference of [
 ]) {
   if (!html.includes(reference)) throw new Error(`Missing index.html reference: ${reference}`);
 }
+
+const app = await readFile(resolve(root, 'src/app.js'), 'utf8');
+const foundation = await readFile(resolve(root, 'src/domain/programmes/foundationProgramme.js'), 'utf8');
+const lean = await readFile(resolve(root, 'src/domain/programmes/leanAthleticProgramme.js'), 'utf8');
+const fallback = await readFile(resolve(root, 'src/domain/programmes/threeDayFallback.js'), 'utf8');
+const exercises = await readFile(resolve(root, 'src/domain/exercises/exerciseCatalog.js'), 'utf8');
+const snapshot = await readFile(resolve(root, 'src/domain/workouts/createWorkoutSnapshot.js'), 'utf8');
+
+if (/Weeks? 1.?[–-]8|Week 8/i.test(`${app}\n${html}`)) throw new Error('The active app still presents the obsolete eight-week Foundation.');
+for (const id of ['foundation-a','foundation-b','foundation-c']) if (!foundation.includes(`id: '${id}'`)) throw new Error(`Missing ${id}.`);
+for (const id of ['lean-lower-a','lean-upper-a','lean-lower-b','lean-upper-b']) if (!lean.includes(`id: '${id}'`)) throw new Error(`Missing ${id}.`);
+for (const id of ['lean-three-day-a','lean-three-day-b','lean-three-day-c']) if (!fallback.includes(`id:'${id}'`) && !fallback.includes(`id: '${id}'`)) throw new Error(`Missing ${id}.`);
+if (!exercises.includes("id:'barbell-curl'")) throw new Error('Barbell curl is not a first-class exercise.');
+if (!app.includes('createWorkoutSnapshot') || !snapshot.includes('deepFreeze')) throw new Error('Immutable active-workout snapshots are absent.');
+if (!app.includes('nextRequiredWorkout')) throw new Error('The active app does not use programme rotation.');
+if (!lean.includes('optionalE') || !fallback.includes('threeDayFallback')) throw new Error('Lean Athletic optional or fallback programming is missing.');
 
 console.log('Proof Fitness project structure verified.');
