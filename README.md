@@ -32,6 +32,8 @@ npm run programme:validate
 npm run check
 npm test
 npm run build
+npm run test:integration
+npm run audit:bundle
 ```
 
 `npm run check` validates syntax, production structure, the programme catalog, persistence requirements, the unchanged run script, and automated tests.
@@ -42,7 +44,9 @@ The Data screen exports every durable record, including active workout snapshots
 
 “Reset all Proof Fitness data” requires typing `RESET`, deletes IndexedDB and Proof Fitness caches, and returns to onboarding only after deletion succeeds.
 
-See [Persistence](docs/PERSISTENCE.md), [Programme domain](docs/PROGRAMME_DOMAIN.md), and [Product status](docs/PRODUCT_STATUS.md).
+See [Persistence](docs/PERSISTENCE.md), [Programme domain](docs/PROGRAMME_DOMAIN.md), [production audit](docs/PRODUCTION_AUDIT.md), [manual PWA checklist](docs/MANUAL_PWA_TEST_CHECKLIST.md), and [Product status](docs/PRODUCT_STATUS.md).
+
+The automated production audit is complete. The current release category is **READY FOR DEVICE ACCEPTANCE TESTING**, not fully production-released: installed iPhone and Android checks remain mandatory.
 
 ## Run-coach audio
 

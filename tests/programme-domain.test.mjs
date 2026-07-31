@@ -144,6 +144,17 @@ test('progression is exercise-ID specific, confirmed, and plate-realistic', () =
   assert.equal(isAchievableLoad(20, 'two-dumbbells-matched', unavailable), false);
 });
 
+test('all audited curl, row, pullover, and pull-up progression records stay independent',()=>{
+  const ids=['barbell-curl','dumbbell-curl','hammer-curl','barbell-bent-over-row','one-arm-dumbbell-row','dumbbell-pullover','pull-up-progression'];
+  let evidence={};
+  ids.forEach((exerciseId,index)=>{
+    evidence=recordExerciseEvidence(evidence,{exerciseId,controlled:index%2===0,hitTopOfRange:index%3===0});
+  });
+  assert.deepEqual(Object.keys(evidence).sort(),[...ids].sort());
+  ids.forEach(exerciseId=>{assert.equal(evidence[exerciseId].length,1);assert.equal(evidence[exerciseId][0].exerciseId,exerciseId);});
+  assert.notDeepEqual(evidence['barbell-curl'],evidence['dumbbell-curl']);
+});
+
 test('required workouts validate and stay in documented duration tolerance', () => {
   const result = validateProgrammeDomain();
   assert.equal(result.errors.length, 0); assert.deepEqual(result.warnings, []);

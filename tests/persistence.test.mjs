@@ -8,6 +8,7 @@ import { createWorkoutSnapshot } from '../src/domain/workouts/createWorkoutSnaps
 import { getWorkoutTemplate } from '../src/domain/programmes/programmeCatalog.js';
 import { DEFAULT_EQUIPMENT } from '../src/domain/equipment/equipmentCatalog.js';
 import { nextRequiredWorkout } from '../src/domain/scheduling/workoutRotation.js';
+import { localDate } from '../src/db/transactions.js';
 
 function fixtureName(label) { return `proof-fitness-test-${label}-${crypto.randomUUID()}`; }
 async function context(t,label) {
@@ -88,6 +89,20 @@ test('meals, check-ins, measurements, progression, reviews, transitions, equipme
   assert.equal(state.runs[0].audioPositionSeconds,418); assert.equal(state.runs[0].guidanceMode,'chimes');
 });
 
+test('accepted, deferred, and rejected recommendations persist without cross-exercise duplication',async t=>{
+  const {db,persistence}=await context(t,'progression-decisions');
+  await persistence.completeOnboarding(onboardingInput());
+  await persistence.saveProgression({exerciseId:'barbell-curl',exerciseVersion:1,calibrationStatus:'appropriate',acceptedRecommendation:{loadKg:10},deferredRecommendation:null,rejectedRecommendation:null});
+  await persistence.saveProgression({exerciseId:'dumbbell-curl',exerciseVersion:1,calibrationStatus:'too-heavy',acceptedRecommendation:null,deferredRecommendation:{loadKg:5},rejectedRecommendation:null});
+  await persistence.saveProgression({exerciseId:'hammer-curl',exerciseVersion:1,calibrationStatus:'too-light',acceptedRecommendation:null,deferredRecommendation:null,rejectedRecommendation:{loadKg:15.25,reason:'plate-infeasible'}});
+  const state=await hydrateState(db);
+  assert.equal(state.progression.length,3);
+  assert.equal(new Set(state.progression.map(item=>item.exerciseId)).size,3);
+  assert.equal(state.progression.find(item=>item.exerciseId==='barbell-curl').acceptedRecommendation.loadKg,10);
+  assert.equal(state.progression.find(item=>item.exerciseId==='dumbbell-curl').deferredRecommendation.loadKg,5);
+  assert.equal(state.progression.find(item=>item.exerciseId==='hammer-curl').rejectedRecommendation.reason,'plate-infeasible');
+});
+
 test('export/replace round trip preserves records and rejects future schemas',async t=>{
   const source=await context(t,'export-source');
   await source.persistence.completeOnboarding(onboardingInput());
@@ -111,4 +126,20 @@ test('streak requires workouts on configured strength days but not rest days',()
   assert.equal(calculateStreak(common,today),0);
   common.workouts.push({localDate:'2026-07-31',status:'completed'});
   assert.equal(calculateStreak(common,today),2);
+});
+
+test('local calendar evidence stays correct across midnight when UTC differs',()=>{
+  const beforeMidnight=new Date(2026,6,31,23,59);
+  const afterMidnight=new Date(2026,7,1,0,1);
+  assert.equal(localDate(beforeMidnight),'2026-07-31');
+  assert.equal(localDate(afterMidnight),'2026-08-01');
+  assert.equal(afterMidnight.toISOString().slice(0,10),'2026-07-31');
+  const records={profile:{trainingDays:[]},workouts:[],mealChecks:[],checkIns:[]};
+  for(const mealId of ['breakfast','lunch','snack','dinner']) records.mealChecks.push({localDate:'2026-07-31',mealId,status:'planned'});
+  records.checkIns.push({localDate:'2026-07-31',feeling:'Good'});
+  assert.equal(calculateStreak(records,beforeMidnight),1);
+  assert.equal(calculateStreak(records,afterMidnight),0);
+  for(const mealId of ['breakfast','lunch','snack','dinner']) records.mealChecks.push({localDate:'2026-08-01',mealId,status:'planned'});
+  records.checkIns.push({localDate:'2026-08-01',feeling:'Good'});
+  assert.equal(calculateStreak(records,afterMidnight),2);
 });

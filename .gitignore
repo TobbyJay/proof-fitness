@@ -7,6 +7,8 @@ dist/
 .env.*
 !.env.example
 coverage/
+playwright-report/
+test-results/
 scripts/audio/.venv/
 scripts/audio/.work/
 scripts/audio/.cache/

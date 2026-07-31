@@ -1,5 +1,13 @@
 # Product status
 
+## Release readiness
+
+**READY FOR DEVICE ACCEPTANCE TESTING** as of 2026-07-31.
+
+The production integration suite covers clean installation, onboarding recovery and atomic failure, active workout recovery and write failures, pull-up snapshot behavior, Week 4 outcomes and schedule transitions, run recovery, production-shaped export/restore/reset, service-worker replacement, forced-network-failure offline operation, serious/critical accessibility scans, bundle inspection, and five representative mobile viewports.
+
+Physical installed-PWA testing on iPhone and Android is still required. Proof Fitness must not be described as **READY FOR PRODUCTION RELEASE** until the checks in `docs/MANUAL_PWA_TEST_CHECKLIST.md` pass on real devices.
+
 ## Production persistence baseline
 
 Proof Fitness now uses Dexie over IndexedDB for account-free, backend-free local persistence. First render waits for database migration and hydration. A database failure opens recovery controls rather than appearing to be a new installation.
@@ -18,7 +26,8 @@ Programme domain v1 remains the single source of truth. It includes 44 versioned
 - Restore is replace-only; record merge is unavailable.
 - Background audio and wake lock support vary across platforms.
 - Notifications and cross-device synchronization are not implemented.
-- Automated repository and fake-IndexedDB tests are present; broader browser automation and accessibility audits remain useful follow-up work.
+- Physical installed-PWA behavior, OS lock-screen audio/media controls, cold offline launch, and real update prompts remain device-acceptance work.
+- Measurement edit/delete controls and a general progression-recommendation decision UI are not currently exposed.
 
 ## Non-goals
 

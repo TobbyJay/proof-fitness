@@ -15,7 +15,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
+    "test:integration": "npm run build && playwright test",
+    "test:integration:headed": "npm run build && playwright test --headed",
     "programme:validate": "node scripts/validate-programme-domain.mjs",
+    "audit:bundle": "node scripts/inspect-production-bundle.mjs",
     "check": "node --check src/app.js && node --check public/sw.js && node scripts/verify-project.mjs && npm run programme:validate && npm test",
     "audio:setup": "python3 -m venv scripts/audio/.venv && scripts/audio/.venv/bin/python -m pip install --upgrade pip && scripts/audio/.venv/bin/pip install -r scripts/audio/requirements.txt",
     "audio:samples": "scripts/audio/.venv/bin/python scripts/audio/generate_samples.py",
@@ -23,6 +26,8 @@
     "audio:verify": "scripts/audio/.venv/bin/python scripts/audio/verify_audio.py"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.1",
     "fake-indexeddb": "^6.2.5",
     "vite": "^8.1.5"
   },

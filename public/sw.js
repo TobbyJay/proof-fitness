@@ -1,4 +1,4 @@
-const CACHE_NAME = 'proof-fitness-v1.0.0';
+const CACHE_NAME = 'proof-fitness-v1.1.0';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -36,8 +36,18 @@ async function mediaResponse(request, cached) {
   return new Response(bytes.slice(start, end + 1), { status: 206, statusText: 'Partial Content', headers });
 }
 
+async function cacheCurrentAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await cache.addAll(APP_SHELL);
+  const shell = await cache.match('/');
+  if (!shell) throw new Error('Application shell was not cached.');
+  const html = await shell.text();
+  const builtAssets = [...html.matchAll(/(?:src|href)=["'](\/assets\/[^"']+)["']/g)].map(match => match[1]);
+  if (builtAssets.length) await cache.addAll([...new Set(builtAssets)]);
+}
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(cacheCurrentAppShell());
   self.skipWaiting();
 });
 
@@ -105,7 +115,10 @@ self.addEventListener('fetch', (event) => {
           }
           return response;
         })
-        .catch(() => caches.match('/'));
+        .catch((error) => {
+          if (request.mode === 'navigate') return caches.match('/');
+          throw error;
+        });
     })
   );
 });
