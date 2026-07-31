@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#11140f" />
+  <title>Proof Fitness</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/proof-mark.svg" type="image/svg+xml" />
+</head>
+<body>
+  <div class="onboarding-layer" id="onboardingLayer">
+    <section class="onboarding-brand-panel">
+      <button class="brand-mark onboarding-brand" aria-label="Proof Fitness">
+        <span class="brand-glyph">P</span><span class="brand-word">PROOF</span>
+      </button>
+      <div>
+        <span class="eyebrow light-eyebrow">LOCAL-FIRST FITNESS</span>
+        <h1>Build proof, not pressure.</h1>
+        <p>A long-term home strength, Nigerian nutrition and running system—built in blocks, with your records carried forward.</p>
+      </div>
+      <div class="onboarding-proof"><span>12-MONTH SYSTEM</span><span>EQUIPMENT-AWARE</span><span>LOCAL-FIRST</span></div>
+    </section>
+    <section class="onboarding-form-panel">
+      <div class="onboarding-progress"><span id="onboardingStepLabel">STEP 1 OF 4</span><div><i id="onboardingProgressBar"></i></div></div>
+      <div id="onboardingContent"></div>
+    </section>
+  </div>
+  <div id="app" class="app-shell" data-theme="dark">
+    <aside class="desktop-rail" aria-label="Primary navigation">
+      <button class="brand-mark" data-go="today" aria-label="Go to Today">
+        <span class="brand-glyph">P</span>
+        <span class="brand-word">PROOF</span>
+      </button>
+      <nav class="rail-nav">
+        <button class="nav-item active" data-go="today"><span>◉</span><span>Today</span></button>
+        <button class="nav-item" data-go="plan"><span>▤</span><span>Plan</span></button>
+        <button class="nav-item" data-go="progress"><span>↗</span><span>Progress</span></button>
+        <button class="nav-item" data-go="history"><span>◷</span><span>History</span></button>
+        <button class="nav-item" data-go="data"><span>⇄</span><span>Data</span></button>
+      </nav>
+      <div class="rail-bottom">
+        <div class="rail-streak"><span class="eyebrow">Streak</span><strong>12 days</strong></div>
+        <button class="icon-button" id="themeToggle" aria-label="Toggle appearance">☼</button>
+      </div>
+    </aside>
+
+    <main class="main-stage">
+      <header class="mobile-header">
+        <button class="brand-mark compact" data-go="today" aria-label="Go to Today">
+          <span class="brand-glyph">P</span><span class="brand-word">PROOF</span>
+        </button>
+        <button class="icon-button" id="mobileThemeToggle" aria-label="Toggle appearance">☼</button>
+      </header>
+
+      <section class="screen active" data-screen="today">
+        <div class="screen-grid today-grid">
+          <div class="primary-column">
+            <header class="editorial-hero">
+              <div class="hero-meta">
+                <span>FRIDAY · 31 JULY</span>
+                <span>WEEK 1 · CALIBRATION</span>
+              </div>
+              <h1>Full Body C</h1>
+              <p class="hero-subtitle">45–50 minutes · 6 exercises · form guidance is expanded this week.</p>
+              <div class="hero-actions">
+                <button class="button button-primary button-large" data-action="start-workout">Start workout</button>
+                <button class="button button-ghost" data-action="open-recovery-demo">Preview recovery flow</button>
+              </div>
+            </header>
+
+            <section class="proof-line-section" aria-labelledby="proof-line-title">
+              <div class="section-heading-row">
+                <div>
+                  <span class="eyebrow">Accountability</span>
+                  <h2 id="proof-line-title">Twelve days of proof</h2>
+                </div>
+                <span class="status-pill success">On track</span>
+              </div>
+              <div class="proof-line" aria-label="Weekly accountability status">
+                <div class="proof-day done"><span>M</span><strong>✓</strong><small>Workout</small></div>
+                <div class="proof-day rest"><span>T</span><strong>✓</strong><small>Rest</small></div>
+                <div class="proof-day done"><span>W</span><strong>✓</strong><small>Workout</small></div>
+                <div class="proof-day rest"><span>T</span><strong>✓</strong><small>Rest</small></div>
+                <div class="proof-day current"><span>F</span><strong>•</strong><small>Now</small></div>
+                <div class="proof-day future"><span>S</span><strong>—</strong><small>Optional</small></div>
+                <div class="proof-day future"><span>S</span><strong>—</strong><small>Rest</small></div>
+              </div>
+            </section>
+
+            <section class="daily-actions" aria-labelledby="daily-actions-title">
+              <div class="section-heading-row">
+                <div>
+                  <span class="eyebrow">Today</span>
+                  <h2 id="daily-actions-title">Four things, no busywork</h2>
+                </div>
+                <span class="counter-label"><strong id="dailyDoneCount">0</strong>/4 complete</span>
+              </div>
+              <div class="action-list">
+                <button class="action-row" data-action="start-workout">
+                  <span class="action-index">01</span>
+                  <span class="action-copy"><strong>Complete Full Body C</strong><small>Next: reverse lunges · 5 kg per dumbbell</small></span>
+                  <span class="action-state" id="workoutState">Start</span>
+                </button>
+                <button class="action-row" data-go="plan">
+                  <span class="action-index">02</span>
+                  <span class="action-copy"><strong>Check four meals</strong><small id="mealStatusText">Nothing logged yet</small></span>
+                  <span class="action-state" id="mealState">Open</span>
+                </button>
+                <button class="action-row" data-action="open-feeling">
+                  <span class="action-index">03</span>
+                  <span class="action-copy"><strong>Log how you feel</strong><small id="feelingStatusText">One tap this evening</small></span>
+                  <span class="action-state" id="feelingState">Log</span>
+                </button>
+                <button class="action-row" data-action="log-weight">
+                  <span class="action-index">04</span>
+                  <span class="action-copy"><strong>Morning weight</strong><small id="weightStatusText">Due today · weekly average matters</small></span>
+                  <span class="action-state" id="weightState">Add</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <aside class="context-column">
+            <section class="context-panel meal-preview">
+              <div class="section-heading-row compact-row">
+                <div>
+                  <span class="eyebrow">Meals</span>
+                  <h3>Friday plan</h3>
+                </div>
+                <button class="text-button" data-go="plan">View all</button>
+              </div>
+              <div id="todayMealPreview" class="meal-preview-list"></div>
+            </section>
+
+            <section class="context-panel next-load-panel">
+              <span class="eyebrow">Progression watch</span>
+              <h3>Romanian deadlift</h3>
+              <div class="load-pair">
+                <div><small>Current</small><strong>15 kg</strong></div>
+                <span class="load-arrow">→</span>
+                <div><small>Next</small><strong>16 kg</strong></div>
+              </div>
+              <p>One more successful appearance before this increase becomes available.</p>
+              <button class="button button-secondary full-width" data-go="progress">Review progression</button>
+            </section>
+
+            <section class="context-panel backup-panel">
+              <div>
+                <span class="eyebrow">Local data</span>
+                <h3>Backup due in 3 days</h3>
+                <p>Your records stay on this device until you export them.</p>
+              </div>
+              <button class="icon-button accent" data-go="data" aria-label="Open data backup">⇄</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="plan">
+        <div class="screen-grid plan-grid">
+          <div class="primary-column">
+            <header class="page-heading">
+              <div><span class="eyebrow">Plan</span><h1>Friday fuel</h1></div>
+              <div class="segmented-control" role="group" aria-label="Plan view">
+                <button class="selected" data-plan-view="meals">Meals</button>
+                <button data-plan-view="week">Week</button>
+                <button data-plan-view="blocks">12 months</button>
+              </div>
+            </header>
+
+            <div id="mealPlanView" class="meal-timeline"></div>
+
+            <div id="weekPlanView" class="week-programme hidden">
+              <div class="programme-spine">
+                <article class="programme-day complete"><span>MON</span><div><strong>Full Body A</strong><small>Completed · 46 min</small></div><b>✓</b></article>
+                <article class="programme-day rest"><span>TUE</span><div><strong>Recovery</strong><small>Meals + check-in completed</small></div><b>✓</b></article>
+                <article class="programme-day complete"><span>WED</span><div><strong>Full Body B</strong><small>Completed · 49 min</small></div><b>✓</b></article>
+                <article class="programme-day rest"><span>THU</span><div><strong>Recovery</strong><small>30-minute walk</small></div><b>✓</b></article>
+                <article class="programme-day current"><span>FRI</span><div><strong>Full Body C</strong><small>Scheduled · 6:30 PM</small></div><b>NOW</b></article>
+                <article class="programme-day run"><span>SAT</span><div><strong>Run–walk foundation</strong><small>Starts Week 3 · 5-min warm-up · 1 min easy / 2 min brisk × 6 · cool-down</small></div><b>RUN</b></article>
+                <article class="programme-day rest"><span>SUN</span><div><strong>Recovery</strong><small>Meals + weekly reflection</small></div><b>—</b></article>
+              </div>
+              <button class="button button-secondary full-width run-preview-button" data-action="preview-run">Preview first run</button>
+            </div>
+
+            <div id="blockPlanView" class="block-plan hidden">
+              <header class="block-plan-hero">
+                <span class="eyebrow">Training year</span>
+                <h2>Eight weeks is the first chapter.</h2>
+                <p>Six connected blocks preserve your strength history while changing volume, exercises and running exposure.</p><span class="status-pill success block-track-pill">TRACK · <span data-selected-track>Lean Athletic</span></span>
+              </header>
+              <div class="block-rail" id="blockRail">
+                <article class="training-block current"><span>01</span><div><small>Weeks 1–8</small><h3>Foundation</h3><p>Technique, calibration, three strength days, pull-up entry work when installed—or a pullover fallback—and one easy run from Week 3.</p></div><b>NOW</b></article>
+                <article class="training-block"><span>02</span><div><small>Weeks 9–16</small><h3>Muscle-building base</h3><p>Up to two pull-up exposures when installed, more upper-back and shoulder volume, one easy run.</p></div><b id="blockTwoStatus">NEXT</b></article>
+                <article class="training-block"><span>03</span><div><small>Weeks 17–24</small><h3>Lean athletic</h3><p>Three strength sessions, one to two runs and stronger unilateral work.</p></div><b>03</b></article>
+                <article class="training-block"><span>04</span><div><small>Weeks 25–32</small><h3>Strength emphasis</h3><p>Lower rep priorities where equipment permits, longer rests, easy running maintained.</p></div><b>04</b></article>
+                <article class="training-block"><span>05</span><div><small>Weeks 33–40</small><h3>Physique emphasis</h3><p>Shoulders, lats, upper chest, arms and lower-body weak points identified from your data.</p></div><b>05</b></article>
+                <article class="training-block"><span>06</span><div><small>Weeks 41–48</small><h3>Hybrid consolidation</h3><p>Hold muscle and strength while becoming a more capable runner.</p></div><b>06</b></article>
+                <article class="training-block review"><span>↺</span><div><small>Weeks 49–52</small><h3>Review and reset</h3><p>Lighter training, annual comparison and selection of the next year’s emphasis.</p></div><b>YEAR</b></article>
+              </div>
+              <div class="button-row"><button class="button button-primary" data-action="week-eight-review">Preview Week 8 review</button><button class="button button-ghost" data-action="choose-track">Choose long-term track</button></div>
+            </div>
+          </div>
+
+          <aside class="context-column">
+            <section class="context-panel nutrition-brief">
+              <span class="eyebrow">Daily target</span>
+              <div class="nutrition-number"><strong>125–140</strong><span>g protein</span></div>
+              <p>Three proper meals plus one protein-based snack. Alternatives prioritise similar protein and energy—not fake nutritional equivalence.</p>
+            </section>
+            <section class="context-panel">
+              <span class="eyebrow">Meal rule</span>
+              <h3>Planned or approved alternative</h3>
+              <p>Either counts as adherence. “Something else” is recorded honestly but does not automatically count.</p>
+            </section>
+            <section class="context-panel pullup-equipment-card">
+              <span class="eyebrow">Equipment upgrade</span>
+              <h3 id="pullupEquipmentTitle">Pull-up bar · Owned, not installed</h3>
+              <p id="pullupEquipmentCopy">Workout C uses a dumbbell pullover until installation and safety confirmation.</p>
+              <button class="button button-secondary full-width" id="pullupEquipmentButton" data-action="pullup-setup">Update pull-up bar status</button>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="progress">
+        <div class="screen-grid progress-grid">
+          <div class="primary-column">
+            <header class="page-heading">
+              <div><span class="eyebrow">Progress</span><h1>What is actually changing</h1></div>
+              <span class="status-pill neutral">Block 1 · Week 1 of 8</span>
+            </header>
+
+            <section class="insight-banner">
+              <span class="eyebrow">Current read</span>
+              <h2>Too early for conclusions. Build clean evidence first.</h2>
+              <p>Weight, waist and strength trends become useful after several consistent weeks—not after one noisy measurement.</p>
+            </section>
+
+            <section class="metric-strip">
+              <div><small>Weight</small><strong>69.8 kg</strong><span>4-week avg 69.4</span></div>
+              <div><small>Waist</small><strong>84.0 cm</strong><span>Baseline</span></div>
+              <div><small>Workouts</small><strong>2 / 3</strong><span>This week</span></div>
+              <div><small>Meals</small><strong id="progressMealAdherence">0%</strong><span>Today</span></div>
+            </section>
+
+            <section class="year-transition-card">
+              <div>
+                <span class="eyebrow">End-of-block transition</span>
+                <h2>Week 8 should decide what happens next.</h2>
+                <p>The review compares strength, pull-up rung, running tolerance, weight, waist, meals and readiness—then offers one next-block recommendation.</p>
+              </div>
+              <div class="year-transition-actions">
+                <button class="button button-primary" data-action="week-eight-review">Open Week 8 review</button>
+                <button class="button button-secondary" data-action="choose-track">Preview track choice</button>
+              </div>
+            </section>
+
+            <section class="progression-card">
+              <div class="section-heading-row">
+                <div><span class="eyebrow">Week 3 preview</span><h2>Progression recommendation</h2></div>
+                <span class="status-pill effort">Needs one more success</span>
+              </div>
+              <div class="plate-comparison">
+                <div class="plate-side">
+                  <small>Current plate-only load</small>
+                  <strong>15 kg</strong>
+                  <div class="barbell-diagram" aria-label="Current barbell: five kilogram and two point five kilogram plate on each side">
+                    <div class="plates left"><span class="plate p5">5</span><span class="plate p25">2.5</span></div>
+                    <div class="bar"></div>
+                    <div class="plates right"><span class="plate p25">2.5</span><span class="plate p5">5</span></div>
+                  </div>
+                  <p>5 kg + 2.5 kg per side</p>
+                </div>
+                <div class="change-chip">+1 kg</div>
+                <div class="plate-side next">
+                  <small>Next balanced load</small>
+                  <strong>16 kg</strong>
+                  <div class="barbell-diagram" aria-label="Next barbell: five kilogram, two point five kilogram and zero point five kilogram plate on each side">
+                    <div class="plates left"><span class="plate p5">5</span><span class="plate p25">2.5</span><span class="plate p05 added">.5</span></div>
+                    <div class="bar"></div>
+                    <div class="plates right"><span class="plate p05 added">.5</span><span class="plate p25">2.5</span><span class="plate p5">5</span></div>
+                  </div>
+                  <p>5 kg + 2.5 kg + 0.5 kg per side</p>
+                </div>
+              </div>
+              <div class="recommendation-reason">
+                <strong>Why it is not active yet</strong>
+                <p>Calibration completes in Week 2. From Week 3, two qualifying appearances are required. Two challenging completions require a third success.</p>
+              </div>
+              <div class="button-row">
+                <button class="button button-primary" data-action="preview-progression">Preview decision flow</button>
+                <button class="button button-ghost" data-action="show-tempo">See tempo alternative</button>
+              </div>
+            </section>
+          </div>
+
+          <aside class="context-column">
+            <section class="context-panel">
+              <span class="eyebrow">Progression states</span>
+              <ol class="state-list">
+                <li class="done"><span>01</span><div><strong>Calibrate</strong><small>Weeks 1–2</small></div></li>
+                <li class="current"><span>02</span><div><strong>Repeat cleanly</strong><small>Earn evidence</small></div></li>
+                <li><span>03</span><div><strong>Recommend</strong><small>Never change silently</small></div></li>
+                <li><span>04</span><div><strong>Confirm</strong><small>Accept, defer or choose another method</small></div></li>
+              </ol>
+            </section>
+            <section class="context-panel pullup-path-card">
+              <span class="eyebrow">Pull-up path</span>
+              <h3 id="pullupProgressLabel">Locked · owned, not installed</h3>
+              <div class="pullup-mini-path"><span class="done">Hang</span><span class="current">Negative</span><span>Assisted</span><span>Strict</span></div>
+              <button class="button button-secondary full-width" id="pullupPathButton" data-action="choose-pullup-level">Set up pull-up bar</button>
+            </section>
+            <section class="context-panel warning-panel">
+              <span class="eyebrow">Large jump warning</span>
+              <h3>Lateral raise: 2.5 → 3.5 kg</h3>
+              <p>That is a 40% increase per dumbbell. The app recommends tempo or another successful appearance first.</p>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="history">
+        <div class="screen-grid history-grid">
+          <div class="primary-column">
+            <header class="page-heading">
+              <div><span class="eyebrow">History</span><h1>Your record, not a highlight reel</h1></div>
+              <button class="button button-ghost">Filter</button>
+            </header>
+            <div class="history-list">
+              <article class="history-entry">
+                <div class="history-date"><strong>29</strong><span>JUL</span></div>
+                <div><span class="eyebrow">Workout B</span><h3>Full Body B</h3><p>49:08 · 6 exercises · 18 sets</p></div>
+                <span class="status-pill success">Complete</span>
+              </article>
+              <article class="history-entry">
+                <div class="history-date"><strong>28</strong><span>JUL</span></div>
+                <div><span class="eyebrow">Rest day</span><h3>Meals and check-in</h3><p>4 of 4 meals · feeling: Good</p></div>
+                <span class="status-pill rest">Qualified</span>
+              </article>
+              <article class="history-entry run-entry">
+                <div class="history-date"><strong>27</strong><span>JUL</span></div>
+                <div><span class="eyebrow">Run–walk 01</span><h3>Easy aerobic foundation</h3><p>28:00 · 6 run intervals · conversational effort</p></div>
+                <span class="status-pill rest">Complete</span>
+              </article>
+              <article class="history-entry partial">
+                <div class="history-date"><strong>26</strong><span>JUL</span></div>
+                <div><span class="eyebrow">Workout D</span><h3>Optional conditioning</h3><p>18:42 · stopped after conditioning</p></div>
+                <span class="status-pill effort">Partial</span>
+              </article>
+            </div>
+          </div>
+          <aside class="context-column">
+            <section class="context-panel receipt-mini">
+              <span class="eyebrow">Selected receipt</span>
+              <h3>Full Body B</h3>
+              <div class="receipt-rule"></div>
+              <dl><div><dt>Duration</dt><dd>49:08</dd></div><div><dt>Session</dt><dd>Challenging</dd></div><div><dt>Progression</dt><dd>1 success</dd></div><div><dt>Next</dt><dd>Workout C</dd></div></dl>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section class="screen" data-screen="data">
+        <div class="screen-grid data-grid">
+          <div class="primary-column">
+            <header class="page-heading">
+              <div><span class="eyebrow">Data</span><h1>Your records should be portable</h1></div>
+              <span class="status-pill neutral">Local-only prototype</span>
+            </header>
+
+            <section class="data-hero">
+              <div>
+                <span class="eyebrow">Last backup</span>
+                <h2>Never</h2>
+                <p>The production app stores your records locally. Export before clearing browser data or changing devices.</p>
+              </div>
+              <div class="data-actions">
+                <button class="button button-primary button-large" data-action="export-demo">Export backup</button>
+                <button class="button button-secondary" data-action="import-demo">Import backup</button>
+              </div>
+            </section>
+
+            <section class="record-inventory">
+              <div><span>Strength + run sessions</span><strong>3</strong></div>
+              <div><span>Meal checks</span><strong id="dataMealChecks">0</strong></div>
+              <div><span>Measurements</span><strong id="dataMeasurements">0</strong></div>
+              <div><span>Schema version</span><strong>0.4-demo</strong></div>
+            </section>
+
+            <section class="privacy-note">
+              <strong>Prototype boundary</strong>
+              <p>This design demonstrates export, import preview and conflict resolution. It does not use IndexedDB or production data migrations yet. The included service worker only supports basic app and media caching.</p>
+            </section>
+          </div>
+          <aside class="context-column">
+            <section class="context-panel">
+              <span class="eyebrow">Import contract</span>
+              <ol class="numbered-list"><li>Validate file</li><li>Preview counts</li><li>Resolve conflicts</li><li>Merge or replace</li><li>Recalculate streaks</li></ol>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+
+      <section class="screen run-screen" data-screen="run">
+        <div class="workout-topbar run-topbar">
+          <button class="icon-button dark" data-action="minimise-run" aria-label="Minimise run">↓</button>
+          <div><span class="eyebrow">RUN–WALK 01</span><strong id="runElapsed">00:00</strong></div>
+          <button class="text-button light" data-action="end-run">End</button>
+        </div>
+        <div class="run-stage" id="runStage"></div>
+      </section>
+
+      <section class="screen workout-screen" data-screen="workout">
+        <div class="workout-topbar">
+          <button class="icon-button dark" data-action="minimise-workout" aria-label="Minimise workout">↓</button>
+          <div><span class="eyebrow" id="workoutTopbarLabel">FULL BODY C · PULLOVER FALLBACK</span><strong id="workoutElapsed">00:00</strong></div>
+          <button class="text-button light" data-action="end-workout-menu">End</button>
+        </div>
+
+        <div class="workout-stage" id="workoutStage"></div>
+      </section>
+
+      <nav class="mobile-nav" aria-label="Mobile navigation">
+        <button class="nav-item active" data-go="today"><span>◉</span><small>Today</small></button>
+        <button class="nav-item" data-go="plan"><span>▤</span><small>Plan</small></button>
+        <button class="nav-item" data-go="progress"><span>↗</span><small>Progress</small></button>
+        <button class="nav-item" data-go="history"><span>◷</span><small>History</small></button>
+        <button class="nav-item" data-go="data"><span>⇄</span><small>Data</small></button>
+      </nav>
+    </main>
+
+    <div class="modal-layer hidden" id="modalLayer" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-backdrop" data-action="close-modal"></div>
+      <section class="modal-sheet" id="modalContent"></section>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
+    <audio id="runCoachAudio" preload="metadata">
+      <source src="/audio/coach/starter-run-coach.opus" type='audio/ogg; codecs="opus"'>
+      <source src="/audio/coach/starter-run-coach.mp3" type="audio/mpeg">
+    </audio>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

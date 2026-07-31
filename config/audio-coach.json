@@ -1,0 +1,18 @@
+{
+  "language": "british-english",
+  "languageCode": "b",
+  "voice": "bf_emma",
+  "speed": 0.95,
+  "sampleRate": 24000,
+  "detailedCoaching": true,
+  "warningSeconds": 10,
+  "silenceBeforeMs": 120,
+  "silenceAfterMs": 180,
+  "mastering": {
+    "integratedLufs": -16,
+    "truePeakDb": -1.5,
+    "loudnessRange": 7,
+    "opusBitrate": "32k",
+    "mp3Bitrate": "48k"
+  }
+}

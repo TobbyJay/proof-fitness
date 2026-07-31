@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "starter-run",
+  "durationSeconds": 1680,
+  "voiceEngine": "kokoro",
+  "voice": "bf_emma",
+  "language": "b",
+  "speed": 0.95,
+  "kokoroVersion": "0.9.4",
+  "generatedAt": "2026-07-31T05:33:13Z",
+  "mastering": {
+    "integratedLufs": -16,
+    "truePeakDb": -1.5,
+    "sampleRate": 24000,
+    "opusBitrate": "32k",
+    "mp3Bitrate": "48k"
+  },
+  "files": {
+    "opus": {
+      "path": "/audio/coach/starter-run-coach.opus",
+      "sha256": "d7aaf39acd1d850df243af13175911649d6f022c36ac30cfaa431e6062cea171"
+    },
+    "mp3": {
+      "path": "/audio/coach/starter-run-coach.mp3",
+      "sha256": "1997d587abc6c398325d8a3a1dd6e2cdacde3fe6c7da71a424c4da58796d40f7"
+    },
+    "chimes": {
+      "path": "/audio/chimes/starter-run-chimes.opus",
+      "sha256": "fbf9533f854041923c5b793ea2dd1674455a37fcd05cba29c7a88e7c66fcb138"
+    }
+  },
+  "cues": [
+    {
+      "id": "warmup",
+      "timeSeconds": 0,
+      "phase": "warm-up-walk",
+      "kind": "start"
+    },
+    {
+      "id": "warmup-warning",
+      "timeSeconds": 290,
+      "phase": "warm-up-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-1",
+      "timeSeconds": 300,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-1-warning",
+      "timeSeconds": 350,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-1",
+      "timeSeconds": 360,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-1-warning",
+      "timeSeconds": 470,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-2",
+      "timeSeconds": 480,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-2-warning",
+      "timeSeconds": 530,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-2",
+      "timeSeconds": 540,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-2-warning",
+      "timeSeconds": 650,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-3",
+      "timeSeconds": 660,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-3-warning",
+      "timeSeconds": 710,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-3",
+      "timeSeconds": 720,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-3-warning",
+      "timeSeconds": 830,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-4",
+      "timeSeconds": 840,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-4-warning",
+      "timeSeconds": 890,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-4",
+      "timeSeconds": 900,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-4-warning",
+      "timeSeconds": 1010,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-5",
+      "timeSeconds": 1020,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-5-warning",
+      "timeSeconds": 1070,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-5",
+      "timeSeconds": 1080,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-5-warning",
+      "timeSeconds": 1190,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-6",
+      "timeSeconds": 1200,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-6-warning",
+      "timeSeconds": 1250,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-6",
+      "timeSeconds": 1260,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-6-warning",
+      "timeSeconds": 1370,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "cooldown",
+      "timeSeconds": 1380,
+      "phase": "cool-down-walk",
+      "kind": "start"
+    },
+    {
+      "id": "cooldown-warning",
+      "timeSeconds": 1670,
+      "phase": "cool-down-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "session-complete",
+      "timeSeconds": 1680,
+      "phase": "complete",
+      "kind": "completion"
+    }
+  ]
+}

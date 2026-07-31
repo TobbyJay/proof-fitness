@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Proof Fitness</title>
+  <rect width="512" height="512" rx="112" fill="#11140f"/>
+  <rect x="104" y="104" width="304" height="304" rx="88" fill="#c7f53a" transform="rotate(-4 256 256)"/>
+  <path d="M188 354V158h82c47 0 82 29 82 72 0 46-35 76-86 76h-26v48h-52Zm52-94h28c20 0 32-11 32-29 0-17-12-27-31-27h-29v56Z" fill="#11140f"/>
+</svg>

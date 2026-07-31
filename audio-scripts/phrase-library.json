@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "description": "Shared non-phase copy and programme-owned chime definitions. Phase speech is derived from starter-run.json.",
+  "sampleText": "Round two. Easy run for one minute.\n\nKeep your stride short and relaxed. Run slowly enough to speak in short sentences.\n\nTen seconds remaining. Prepare to walk.",
+  "chimes": {
+    "warning": [[880, 0.12], [880, 0.12]],
+    "warm-up-walk": [[392, 0.18], [523.25, 0.24]],
+    "easy-run": [[659.25, 0.16], [880, 0.20]],
+    "recovery-walk": [[523.25, 0.18], [392, 0.22]],
+    "cool-down-walk": [[523.25, 0.18], [440, 0.22], [349.23, 0.28]],
+    "session-complete": [[523.25, 0.18], [659.25, 0.18], [783.99, 0.35]]
+  }
+}
