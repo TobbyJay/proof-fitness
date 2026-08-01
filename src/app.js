@@ -17,6 +17,7 @@ import { bootstrapApplication } from './state/applicationBootstrap.js';
 import { persistence } from './state/persistenceCoordinator.js';
 import { localDate, newId } from './db/transactions.js';
 import { calculateDerived } from './state/hydrateState.js';
+import { deriveWorkoutCTA } from './state/deriveWorkoutCTA.js';
 
 const RUN_CACHE_NAME = 'proof-fitness-v1.1.0';
 const RUN_AUDIO = {
@@ -24,6 +25,14 @@ const RUN_AUDIO = {
   mp3: '/audio/coach/starter-run-coach.mp3',
   chimes: '/audio/chimes/starter-run-chimes.opus'
 };
+
+function renderChoice({
+  className = 'choice-button', family, attributes = '', label, description = '',
+  selected = false, disabled = false, badge = '', compact = false
+}) {
+  const classes = [className, 'selectable-control', compact ? 'selectable-control--compact' : '', selected ? 'selected' : ''].filter(Boolean).join(' ');
+  return `<button type="button" class="${classes}" data-selectable-family="${family}" ${attributes} aria-pressed="${selected}" ${disabled ? 'disabled aria-disabled="true"' : ''}><span class="selectable-control__content">${badge ? `<small class="selectable-control__badge">${badge}</small>` : ''}<strong class="selectable-control__label">${label}</strong>${description ? `<small class="selectable-control__description">${description}</small>` : ''}</span><span class="selectable-control__indicator" aria-hidden="true">${selected ? '✓' : '○'}</span></button>`;
+}
 
 function savedRunMode() { return 'voice'; }
 function saveRunMode(value) { return persistence.savePreference({ runGuidanceMode:value }).catch(showPersistenceError); }
@@ -184,6 +193,16 @@ function nextWorkoutTemplate() {
   return getWorkoutTemplate(next.templateId);
 }
 
+function currentWorkoutCTA() {
+  const nextTemplate = nextWorkoutTemplate();
+  return deriveWorkoutCTA({
+    activeWorkout:state.workout,
+    workoutRecords:state.workoutRecords,
+    nextRequiredWorkout:{ id:nextTemplate.id,version:nextTemplate.version,name:nextTemplate.name,snapshot:null },
+    localDate:localDate()
+  });
+}
+
 function snapshotExerciseView(exercise) {
   const definition = getExercise(exercise.exerciseId);
   const load = exercise.selectedLoad == null
@@ -238,19 +257,19 @@ const onboardingSteps = [
   },
   {
     eyebrow: 'Schedule', title: 'Choose three days you can defend.', copy: 'The workout sequence remains A → B → C even when a day moves.',
-    render: () => `<div class="option-grid">${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day => `<button class="option-tile ${onboardingState.days.includes(day) ? 'selected' : ''}" data-ob-day="${day}"><strong>${day}</strong><small>${onboardingState.days.includes(day) ? 'Required workout day' : 'Available'}</small></button>`).join('')}</div><div class="onboarding-fields"><label>Optional workout day<select id="obOptional">${['Saturday','Sunday','None'].map(x => `<option ${x===onboardingState.optionalDay?'selected':''}>${x}</option>`).join('')}</select></label></div>`
+    render: () => `<div class="option-grid" role="group" aria-label="Required training days">${['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(day => renderChoice({className:'option-tile',family:'onboarding-schedule',attributes:`data-ob-day="${day}"`,label:day,description:onboardingState.days.includes(day)?'Required workout day':'Available',selected:onboardingState.days.includes(day)})).join('')}</div><div class="onboarding-fields"><label>Optional workout day<select id="obOptional">${['Saturday','Sunday','None'].map(x => `<option ${x===onboardingState.optionalDay?'selected':''}>${x}</option>`).join('')}</select></label></div>`
   },
   {
     eyebrow: 'Equipment', title: 'Make every load unambiguous.', copy: 'Your plate inventory is ready to confirm. Empty implement weights are optional; plate-only loads remain explicit until entered.',
-    render: () => `<div class="onboarding-summary"><div><span>0.5 kg plates</span><strong>6</strong></div><div><span>1.25 kg plates</span><strong>6</strong></div><div><span>2.5 kg plates</span><strong>4</strong></div><div><span>5 kg plates</span><strong>4</strong></div><div><span>Total removable plates</span><strong>40.5 kg</strong></div><div><span>Pull-up bar</span><strong>${pullupStatusLabels[onboardingState.pullupBarStatus]}</strong></div></div><div class="equipment-status-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="option-tile ${onboardingState.pullupBarStatus === value ? 'selected' : ''}" data-ob-pullup-status="${value}"><strong>${label}</strong><small>${value === 'installed-available' ? 'Requires a one-time safety confirmation' : value === 'owned-not-installed' ? 'Current default · pullovers remain scheduled' : value === 'temporarily-unavailable' ? 'Pull-up progression pauses without resetting' : 'Pull-up work stays locked'}</small></button>`).join('')}</div><div class="pullup-safety"><strong>Conditional programming</strong><p>Pull-up workouts appear only after the bar is marked installed and the safety check is confirmed. Until then, Workout C uses a dumbbell pullover with separate history.</p></div><div class="onboarding-fields two-column"><label>Empty barbell weight (optional)<input id="obBar" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.barWeight}"></label><label>One empty dumbbell handle (optional)<input id="obDumbbell" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.dumbbellWeight}"></label></div>`
+    render: () => `<div class="onboarding-summary"><div><span>0.5 kg plates</span><strong>6</strong></div><div><span>1.25 kg plates</span><strong>6</strong></div><div><span>2.5 kg plates</span><strong>4</strong></div><div><span>5 kg plates</span><strong>4</strong></div><div><span>Total removable plates</span><strong>40.5 kg</strong></div><div><span>Pull-up bar</span><strong>${pullupStatusLabels[onboardingState.pullupBarStatus]}</strong></div></div><div class="equipment-status-grid" role="group" aria-label="Pull-up bar status">${Object.entries(pullupStatusLabels).map(([value,label]) => renderChoice({className:'option-tile',family:'onboarding-pullup',attributes:`data-ob-pullup-status="${value}"`,label,description:value === 'installed-available' ? 'Requires a one-time safety confirmation' : value === 'owned-not-installed' ? 'Current default · pullovers remain scheduled' : value === 'temporarily-unavailable' ? 'Pull-up progression pauses without resetting' : 'Pull-up work stays locked',selected:onboardingState.pullupBarStatus===value})).join('')}</div><div class="pullup-safety"><strong>Conditional programming</strong><p>Pull-up workouts appear only after the bar is marked installed and the safety check is confirmed. Until then, Workout C uses a dumbbell pullover with separate history.</p></div><div class="onboarding-fields two-column"><label>Empty barbell weight (optional)<input id="obBar" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.barWeight}"></label><label>One empty dumbbell handle (optional)<input id="obDumbbell" type="number" step="0.1" placeholder="Unknown" value="${onboardingState.dumbbellWeight}"></label></div>`
   },
   {
     eyebrow: 'Coaching', title: 'Choose your coaching defaults.', copy: 'Pick the run guidance you want saved. You can change this later before any run.',
-    render: () => `<div class="option-grid coaching-options">${[
+    render: () => `<div class="option-grid coaching-options" role="group" aria-label="Run guidance preference">${[
       ['voice','Voice coach','Continuous spoken guidance and ten-second warnings'],
       ['chimes','Chimes only','Continuous audio cues without spoken coaching'],
       ['visual','Visual only','On-screen phases; keep Proof visible']
-    ].map(([value,label,note]) => `<button class="option-tile ${onboardingState.audioMode===value?'selected':''}" data-ob-audio="${value}"><strong>${label}</strong><small>${note}</small></button>`).join('')}</div><label class="run-wake-option"><input id="obNotifications" type="checkbox" ${onboardingState.notificationsEnabled?'checked':''}> <span><strong>Allow reminder prompts later</strong><small>This preference does not request browser permission during setup.</small></span></label>`
+    ].map(([value,label,note]) => renderChoice({className:'option-tile',family:'onboarding-audio',attributes:`data-ob-audio="${value}"`,label,description:note,selected:onboardingState.audioMode===value})).join('')}</div><label class="run-wake-option"><input id="obNotifications" type="checkbox" ${onboardingState.notificationsEnabled?'checked':''}> <span><strong>Allow reminder prompts later</strong><small>This preference does not request browser permission during setup.</small></span></label>`
   },
   {
     eyebrow: 'Ready', title: 'Begin Week 1 without more paperwork.', copy: 'Meals are ready. Food exclusions appear when Meals is opened; waist and reminders appear during the first weekly review.',
@@ -412,11 +431,11 @@ function renderMeals() {
         <div>
           <h2>${meal.planned}</h2>
           <span class="protein-tag">Protein: ${meal.protein}</span>
-          <div class="meal-options">
-            <button class="meal-option-button ${status?.type === 'planned' ? 'selected' : ''}" data-meal-action="planned" data-meal-id="${meal.id}">Ate planned</button>
-            <button class="meal-option-button ${status?.type === 'alternative' ? 'selected' : ''}" data-meal-action="alternative" data-meal-id="${meal.id}">Choose alternative</button>
-            <button class="meal-option-button missed ${status?.type === 'missed' ? 'selected' : ''}" data-meal-action="missed" data-meal-id="${meal.id}">Missed</button>
-            <button class="meal-option-button ${status?.type === 'other' ? 'selected' : ''}" data-meal-action="other" data-meal-id="${meal.id}">Something else</button>
+          <div class="meal-options" role="group" aria-label="${meal.slot} status">
+            ${renderChoice({className:'meal-option-button',family:'meal-status',attributes:`data-meal-action="planned" data-meal-id="${meal.id}"`,label:'Ate planned',selected:status?.type==='planned',compact:true})}
+            ${renderChoice({className:'meal-option-button',family:'meal-status',attributes:`data-meal-action="alternative" data-meal-id="${meal.id}"`,label:'Choose alternative',selected:status?.type==='alternative',compact:true})}
+            ${renderChoice({className:'meal-option-button missed',family:'meal-status',attributes:`data-meal-action="missed" data-meal-id="${meal.id}"`,label:'Missed',selected:status?.type==='missed',compact:true})}
+            ${renderChoice({className:'meal-option-button',family:'meal-status',attributes:`data-meal-action="other" data-meal-id="${meal.id}"`,label:'Something else',selected:status?.type==='other',compact:true})}
           </div>
         </div>
         <div class="meal-card-state">${stateLabel}</div>
@@ -456,8 +475,8 @@ async function handleMealAction(mealId, action) {
   openModal(`
     <div class="modal-heading"><div><span class="eyebrow">${meal.slot}</span><h2 id="modalTitle">Choose an approved alternative</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
     <p>Alternatives are similar in training role, not claimed to be nutritionally identical.</p>
-    <div class="choice-list">
-      ${meal.alternatives.map((alt,index) => `<button class="choice-button" data-alt-index="${index}"><strong>${alt.name}</strong><span>${alt.note}</span></button>`).join('')}
+    <div class="choice-list" role="group" aria-label="Approved alternatives">
+      ${meal.alternatives.map((alt,index) => renderChoice({family:'meal-alternative',attributes:`data-alt-index="${index}"`,label:alt.name,description:alt.note})).join('')}
     </div>
   `);
   modalContent.querySelectorAll('[data-alt-index]').forEach(button => button.addEventListener('click', async () => {
@@ -474,6 +493,8 @@ function mealAdherence() {
 }
 
 function updateDailyStatus() {
+  const workoutCTA=currentWorkoutCTA();
+  state.completedToday=workoutCTA.state==='completed';
   const mealCount = Object.keys(state.meals).length;
   const completedCount = [state.completedToday, mealCount === meals.length, Boolean(state.feeling), Boolean(state.weight)].filter(Boolean).length;
   document.getElementById('dailyDoneCount').textContent = completedCount;
@@ -483,7 +504,7 @@ function updateDailyStatus() {
   document.getElementById('feelingState').textContent = state.feeling ? 'Done' : 'Log';
   document.getElementById('weightStatusText').textContent = state.weight ? `${state.weight.toFixed(1)} kg recorded` : 'Due today · weekly average matters';
   document.getElementById('weightState').textContent = state.weight ? 'Done' : 'Add';
-  document.getElementById('workoutState').textContent = state.workout.active ? 'Resume' : state.completedToday ? 'Done' : 'Start';
+  document.getElementById('workoutState').textContent = workoutCTA.accountabilityState;
   document.getElementById('progressMealAdherence').textContent = `${mealAdherence()}%`;
   document.getElementById('dataMealChecks').textContent = state.derived?.mealChecks||0;
   document.getElementById('dataMeasurements').textContent = state.measurements.length;
@@ -516,8 +537,8 @@ function openFeeling() {
   openModal(`
     <div class="modal-heading"><div><span class="eyebrow">Daily check-in</span><h2 id="modalTitle">How do you feel generally?</h2></div><button class="modal-close" data-action="close-modal">×</button></div>
     <p>One honest tap. This is not a medical diagnosis.</p>
-    <div class="choice-list">
-      ${['Great','Good','Okay','Tired','Poor'].map(value => `<button class="choice-button" data-feeling="${value}"><strong>${value}</strong><span>${value === 'Poor' ? 'Recovery guidance may appear' : 'Record and continue'}</span></button>`).join('')}
+    <div class="choice-list" role="group" aria-label="Daily feeling">
+      ${['Great','Good','Okay','Tired','Poor'].map(value => renderChoice({family:'daily-feeling',attributes:`data-feeling="${value}"`,label:value,description:value === 'Poor' ? 'Recovery guidance may appear' : 'Record and continue',selected:state.feeling===value})).join('')}
     </div>
   `);
   modalContent.querySelectorAll('[data-feeling]').forEach(button => button.addEventListener('click', async () => {
@@ -673,20 +694,37 @@ function updateAll() {
 }
 
 function updateProgrammeUI() {
-  const template = nextWorkoutTemplate();
+  const nextTemplate = nextWorkoutTemplate();
+  const workoutCTA=currentWorkoutCTA();
+  const template = getWorkoutTemplate(workoutCTA.todayScheduledWorkout.id);
   const duration = estimateWorkoutDuration(template);
   const meta = document.getElementById('todayProgrammeMeta');
   if (meta) meta.textContent = `WEEK ${state.programme.currentProgrammeWeek} · ${state.programme.activePhase.toUpperCase()} · ${state.programme.scheduleMode.replaceAll('-', ' ').toUpperCase()}`;
-  const name = document.getElementById('todayWorkoutName'); if (name) name.textContent = template.name;
-  const summary = document.getElementById('todayWorkoutSummary'); if (summary) summary.textContent = `${duration.minutes} minute estimate · ${template.exercises.length} exercises · ${template.primaryAreas.join(', ')}.`;
-  const action = document.getElementById('todayWorkoutAction'); if (action) action.textContent = `Complete ${template.name}`;
-  const firstSlot = template.exercises[0]; const first = getExercise(firstSlot.exerciseId);
-  const firstExercise = document.getElementById('todayWorkoutFirstExercise'); if (firstExercise) firstExercise.textContent = `Next: ${first.name} · ${firstSlot.sets} × ${firstSlot.repTarget}`;
+  const name = document.getElementById('todayWorkoutName'); if (name) name.textContent = workoutCTA.todayScheduledWorkout.name;
+  const summary = document.getElementById('todayWorkoutSummary');
+  if (summary) summary.textContent = workoutCTA.state === 'completed'
+    ? `${workoutCTA.todayScheduledWorkout.name} completed today · Next required: ${nextTemplate.name}.`
+    : workoutCTA.state === 'active'
+      ? `${workoutCTA.todayScheduledWorkout.name} is saved in progress on this device.`
+      : workoutCTA.state === 'partial'
+        ? `Partial session saved today · ${nextTemplate.name} remains the next required workout.`
+        : `${duration.minutes} minute estimate · ${template.exercises.length} exercises · ${template.primaryAreas.join(', ')}.`;
+  const action = document.getElementById('todayWorkoutAction'); if (action) action.textContent = workoutCTA.accountabilityLabel;
+  const firstSlot = nextTemplate.exercises[0]; const first = getExercise(firstSlot.exerciseId);
+  const firstExercise = document.getElementById('todayWorkoutFirstExercise'); if (firstExercise) firstExercise.textContent = workoutCTA.state === 'completed' ? `Next required: ${nextTemplate.name} · ${first.name}` : `Next: ${first.name} · ${firstSlot.sets} × ${firstSlot.repTarget}`;
+  document.querySelectorAll('[data-action="start-workout"]').forEach(button => {
+    button.disabled=workoutCTA.disabled;
+    button.setAttribute('aria-disabled',String(workoutCTA.disabled));
+    button.dataset.workoutCtaState=workoutCTA.state;
+  });
+  const primaryAction=document.querySelector('.hero-actions [data-action="start-workout"]');
+  if(primaryAction) primaryAction.textContent=workoutCTA.ctaLabel;
   const preview = document.getElementById('todayWorkoutPreview');
-  if (preview) preview.innerHTML = `<div class="section-heading-row"><div><span class="eyebrow">Versioned workout preview</span><h2>${template.name}</h2></div><span class="status-pill neutral">${template.id} · v${template.version}</span></div><p>${template.primaryAreas.join(' · ')}</p><ol class="state-list">${template.exercises.map((slot,index) => { const exercise = slot.conditional ? getExercise(pullupEnabledForFutureWorkouts() ? 'pull-up-progression' : slot.fallbackExerciseId) : getExercise(slot.exerciseId); return `<li><span>${String(index+1).padStart(2,'0')}</span><div><strong>${exercise.name}</strong><small>${exercise.equipmentType} · ${slot.sets} × ${slot.repTarget}${slot.optional ? ' · optional' : ''}</small></div></li>`; }).join('')}</ol>${template.exercises.some(slot => slot.conditional) ? `<p class="substitution-note">Pull slot for the next workout: ${pullupEnabledForFutureWorkouts() ? 'current pull-up rung' : 'dumbbell pullover fallback'}. Starting creates an immutable equipment snapshot.</p>` : ''}<div class="import-summary"><div><span>Optional session</span><strong>${state.programme.activePhase === 'foundation' ? 'Run, walk, or mobility' : 'Optional E'}</strong></div><div><span>Review status</span><strong>${state.programme.activePhase === 'foundation' ? state.programme.currentProgrammeWeek >= 4 ? 'Available' : `Week 4 · ${4-state.programme.currentProgrammeWeek} week(s) away` : 'Foundation review retained'}</strong></div><div><span>Schedule mode</span><strong>${state.programme.scheduleMode}</strong></div></div>`;
+  if (preview) preview.innerHTML = `<div class="section-heading-row"><div><span class="eyebrow">${workoutCTA.state==='completed'?'Next required workout':'Versioned workout preview'}</span><h2>${nextTemplate.name}</h2></div><span class="status-pill neutral">${nextTemplate.id} · v${nextTemplate.version}</span></div><p>${nextTemplate.primaryAreas.join(' · ')}</p><ol class="state-list">${nextTemplate.exercises.map((slot,index) => { const exercise = slot.conditional ? getExercise(pullupEnabledForFutureWorkouts() ? 'pull-up-progression' : slot.fallbackExerciseId) : getExercise(slot.exerciseId); return `<li><span>${String(index+1).padStart(2,'0')}</span><div><strong>${exercise.name}</strong><small>${exercise.equipmentType} · ${slot.sets} × ${slot.repTarget}${slot.optional ? ' · optional' : ''}</small></div></li>`; }).join('')}</ol>${nextTemplate.exercises.some(slot => slot.conditional) ? `<p class="substitution-note">Pull slot for the next workout: ${pullupEnabledForFutureWorkouts() ? 'current pull-up rung' : 'dumbbell pullover fallback'}. Starting creates an immutable equipment snapshot.</p>` : ''}<div class="import-summary"><div><span>Optional session</span><strong>${state.programme.activePhase === 'foundation' ? 'Run, walk, or mobility' : 'Optional E'}</strong></div><div><span>Review status</span><strong>${state.programme.activePhase === 'foundation' ? state.programme.currentProgrammeWeek >= 4 ? 'Available' : `Week 4 · ${4-state.programme.currentProgrammeWeek} week(s) away` : 'Foundation review retained'}</strong></div><div><span>Schedule mode</span><strong>${state.programme.scheduleMode}</strong></div></div>`;
 }
 
 async function startWorkout() {
+  if (currentWorkoutCTA().state === 'completed') { showToast('This workout has already been completed.'); return; }
   if (state.settings.restSoundEnabled && !state.settings.audioUnlocked) await unlockRestAudio();
   if (!state.workout.snapshot) {
     const template = nextWorkoutTemplate();
@@ -697,9 +735,12 @@ async function startWorkout() {
   }
   try {
     if (!state.workout.sessionId) {
-      const record=await persistence.startWorkout(state.workout.snapshot,{ readiness:{...state.readiness} }); state.workout.sessionId=record.id;
+      const record=await persistence.startWorkout(state.workout.snapshot,{ readiness:{...state.readiness} }); state.workout.sessionId=record.id; state.workout.snapshot=record.workoutSnapshot;
     } else await persistence.updateWorkout(state.workout.sessionId,{status:'active',pausedAt:null});
-  } catch(error) { showPersistenceError(error); return; }
+  } catch(error) {
+    if(error?.name==='WorkoutAlreadyCompletedError'){showToast(error.message);state.workout.snapshot=null;return;}
+    showPersistenceError(error); return;
+  }
   state.workout.active = true;
   if (state.workout.pullupEnabledAtStart === null) state.workout.pullupEnabledAtStart = pullupEnabledForFutureWorkouts();
   if (!state.workout.startedAt) state.workout.startedAt = Date.now();
@@ -821,7 +862,7 @@ function restAlertControls({ compact = false } = {}) {
   if (compact) {
     return `<div class="rest-alert-compact"><span><strong>${restToneLabel()}</strong> · ${soundStatus} · ${unlockStatus}</span><button class="text-button light" data-test-rest-alert>Test alert</button><button class="text-button light" data-toggle-rest-sound>${state.settings.restSoundEnabled ? 'Mute' : 'Unmute'}</button></div>`;
   }
-  return `<section class="rest-alert-panel"><div><span class="eyebrow">Rest-complete alert</span><h3>${restToneLabel()}</h3><p>${state.settings.restSoundEnabled ? `Sound on · ${unlockStatus}` : 'Sound muted'}${state.settings.vibrationEnabled ? ' · vibration when supported' : ''}</p></div><div class="rest-tone-options" role="group" aria-label="Rest alert sound"><button class="rest-tone-option ${state.settings.restTone === 'double-bell' ? 'selected' : ''}" data-rest-tone="double-bell">Double bell</button><button class="rest-tone-option ${state.settings.restTone === 'digital-beep' ? 'selected' : ''}" data-rest-tone="digital-beep">Digital beep</button><button class="rest-tone-option ${state.settings.restTone === 'soft-chime' ? 'selected' : ''}" data-rest-tone="soft-chime">Soft chime</button></div><div class="rest-alert-actions"><button class="workout-button" data-toggle-rest-sound>${state.settings.restSoundEnabled ? 'Mute sound' : 'Enable sound'}</button><button class="workout-button primary" data-test-rest-alert>Test alert</button></div></section>`;
+  return `<section class="rest-alert-panel"><div><span class="eyebrow">Rest-complete alert</span><h3>${restToneLabel()}</h3><p>${state.settings.restSoundEnabled ? `Sound on · ${unlockStatus}` : 'Sound muted'}${state.settings.vibrationEnabled ? ' · vibration when supported' : ''}</p></div><div class="rest-tone-options" role="group" aria-label="Rest alert sound">${[['double-bell','Double bell'],['digital-beep','Digital beep'],['soft-chime','Soft chime']].map(([value,label])=>renderChoice({className:'rest-tone-option',family:'settings-rest-tone',attributes:`data-rest-tone="${value}"`,label,selected:state.settings.restTone===value,compact:true})).join('')}</div><div class="rest-alert-actions"><button class="workout-button" data-toggle-rest-sound>${state.settings.restSoundEnabled ? 'Mute sound' : 'Enable sound'}</button><button class="workout-button primary" data-test-rest-alert>Test alert</button></div></section>`;
 }
 
 
@@ -837,7 +878,7 @@ function readinessControls() {
     ['sleep','Sleep',['Poor','Okay','Good']],
     ['soreness','Soreness',['Low','Moderate','High']]
   ];
-  return `<section class="readiness-panel"><span class="eyebrow">Before you begin</span><h3>How are you arriving today?</h3><div class="readiness-grid">${groups.map(([key,label,values]) => `<div class="readiness-control"><span>${label}</span><div class="readiness-options">${values.map(value => `<button class="readiness-option ${state.readiness[key] === value ? 'selected' : ''}" data-readiness-key="${key}" data-readiness-value="${value}">${value}</button>`).join('')}</div></div>`).join('')}</div><p class="readiness-read">${readinessMessage()}</p></section>`;
+  return `<section class="readiness-panel"><span class="eyebrow">Before you begin</span><h3>How are you arriving today?</h3><div class="readiness-grid">${groups.map(([key,label,values]) => `<div class="readiness-control"><span id="readiness-${key}-label">${label}</span><div class="readiness-options" role="group" aria-labelledby="readiness-${key}-label">${values.map(value => renderChoice({className:'readiness-option',family:'workout-readiness',attributes:`data-readiness-key="${key}" data-readiness-value="${value}"`,label:value,selected:state.readiness[key]===value,compact:true})).join('')}</div></div>`).join('')}</div><p class="readiness-read">${readinessMessage()}</p></section>`;
 }
 
 function compactFormRefresher(exercise) {
@@ -847,7 +888,7 @@ function compactFormRefresher(exercise) {
 function openCalibrationSheet() {
   const exercise = currentWorkoutExercise();
   const subject = exercise.type === 'bodyweight' ? 'variation' : 'load';
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Calibration · ${exercise.name}</span><h2 id="modalTitle">How was that ${subject} with clean form?</h2></div></div><p>One tap only. The completed exercise remains visible behind this sheet.</p><div class="calibration-options"><button class="calibration-option" data-sheet-calibration="too-light">Too light</button><button class="calibration-option" data-sheet-calibration="appropriate">Appropriate</button><button class="calibration-option" data-sheet-calibration="too-heavy">Too heavy</button></div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Calibration · ${exercise.name}</span><h2 id="modalTitle">How was that ${subject} with clean form?</h2></div></div><p>One tap only. The completed exercise remains visible behind this sheet.</p><div class="calibration-options" role="group" aria-labelledby="modalTitle">${[['too-light','Too light'],['appropriate','Appropriate'],['too-heavy','Too heavy']].map(([value,label])=>renderChoice({className:'calibration-option',family:'exercise-calibration',attributes:`data-sheet-calibration="${value}"`,label,compact:true})).join('')}</div>`);
   modalContent.querySelectorAll('[data-sheet-calibration]').forEach(button => button.addEventListener('click', () => {
     closeModal();
     handleCalibration(button.dataset.sheetCalibration);
@@ -856,7 +897,7 @@ function openCalibrationSheet() {
 
 function openSwapExercise() {
   const exercise = currentWorkoutExercise();
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Exercise substitution</span><h2 id="modalTitle">Swap ${exercise.name}?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Alternatives preserve the movement purpose as closely as this home setup allows.</p><div class="choice-list">${(exercise.substitutes || []).map((sub,index) => `<button class="choice-button" data-substitute-index="${index}"><strong>${sub.name}</strong><span>${sub.note}</span></button>`).join('')}</div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Exercise substitution</span><h2 id="modalTitle">Swap ${exercise.name}?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Alternatives preserve the movement purpose as closely as this home setup allows.</p><div class="choice-list" role="group" aria-labelledby="modalTitle">${(exercise.substitutes || []).map((sub,index) => renderChoice({family:'exercise-substitution',attributes:`data-substitute-index="${index}"`,label:sub.name,description:sub.note,selected:state.workout.substitutions[exercise.substitutionSourceExerciseId||exercise.id]===sub.id})).join('')}</div>`);
   modalContent.querySelectorAll('[data-substitute-index]').forEach(button => button.addEventListener('click', async () => {
     const sub = exercise.substitutes[Number(button.dataset.substituteIndex)];
     const sourceId = exercise.substitutionSourceExerciseId || exercise.id;
@@ -963,7 +1004,7 @@ function renderWorkout() {
   // Calibration is presented as a bottom sheet in v0.3.
 
   if (state.workout.step === 'result') {
-    stage.innerHTML = `<div class="workout-step">${base}<span class="eyebrow">Finish</span><h1 class="workout-title">How did the session land?</h1><p class="workout-copy">This is the minimum honest evidence the progression system needs.</p><div class="choice-list dark-choice-list">${['Completed comfortably','Completed but challenging','Missed repetitions or sets','Stopped early'].map(value => `<button class="choice-button" data-session-result="${value}"><strong>${value}</strong><span>${value.includes('Stopped') ? 'Creates a partial session' : 'Used as progression evidence'}</span></button>`).join('')}</div></div>`;
+    stage.innerHTML = `<div class="workout-step">${base}<span class="eyebrow">Finish</span><h1 class="workout-title" id="sessionResultTitle">How did the session land?</h1><p class="workout-copy">This is the minimum honest evidence the progression system needs.</p><div class="choice-list dark-choice-list" role="group" aria-labelledby="sessionResultTitle">${['Completed comfortably','Completed but challenging','Missed repetitions or sets','Stopped early'].map(value => renderChoice({family:'session-result',attributes:`data-session-result="${value}"`,label:value,description:value.includes('Stopped') ? 'Creates a partial session' : 'Used as progression evidence',selected:state.workout.result===value})).join('')}</div></div>`;
   }
 
   if (state.workout.step === 'receipt') {
@@ -1308,7 +1349,7 @@ function choosePullupLevel() {
     document.getElementById('openPullupStatus')?.addEventListener('click', () => { closeModal(); pullupSetup(); });
     return;
   }
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up progression</span><h2 id="modalTitle">Choose the rung you can perform cleanly</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>The goal is not to force full pull-ups immediately. Start where the movement is controlled.</p><div class="pullup-ladder">${pullupLevels.map(level => `<button class="pullup-rung ${state.pullupLevel === level.id ? 'selected' : ''}" data-pullup-level="${level.id}"><span>${level.id}</span><span><strong>${level.name}</strong><small>${level.prescription} · ${level.note}</small></span><b>${state.pullupLevel === level.id ? 'CURRENT' : 'CHOOSE'}</b></button>`).join('')}</div><div class="pullup-safety"><strong>Safety before volume</strong><p>Confirm the bar is secure before every session. Stop if the frame, fasteners or bar shift. No kipping in this home programme.</p></div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up progression</span><h2 id="modalTitle">Choose the rung you can perform cleanly</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>The goal is not to force full pull-ups immediately. Start where the movement is controlled.</p><div class="pullup-ladder" role="group" aria-labelledby="modalTitle">${pullupLevels.map(level => `<button type="button" class="pullup-rung selectable-control ${state.pullupLevel === level.id ? 'selected' : ''}" data-selectable-family="pullup-rung" data-pullup-level="${level.id}" aria-pressed="${state.pullupLevel===level.id}"><span>${level.id}</span><span><strong class="selectable-control__label">${level.name}</strong><small class="selectable-control__description">${level.prescription} · ${level.note}</small></span><b>${state.pullupLevel === level.id ? '✓ CURRENT' : '○ CHOOSE'}</b></button>`).join('')}</div><div class="pullup-safety"><strong>Safety before volume</strong><p>Confirm the bar is secure before every session. Stop if the frame, fasteners or bar shift. No kipping in this home programme.</p></div>`);
   modalContent.querySelectorAll('[data-pullup-level]').forEach(button => button.addEventListener('click', async () => {
     const pullUpProgressionRung=Number(button.dataset.pullupLevel);
     try{const saved=await persistence.saveEquipment({...state.equipment,pullUpProgressionRung});state.equipment=saved;}catch(error){return showPersistenceError(error);}
@@ -1342,7 +1383,7 @@ function renderPullupSafetyConfirmation() {
 function pullupSetup() {
   const current = pullupStatusLabel();
   const enabled = pullupEnabledForFutureWorkouts();
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up bar status</span><h2 id="modalTitle">Use what is actually available</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Pull-up programming appears only when the bar is installed, available and safety-confirmed. Otherwise, Workout C uses a dumbbell pullover.</p><div class="import-summary"><div><span>Current status</span><strong>${current}</strong></div><div><span>Workout C now</span><strong>${enabled ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div><div><span>Pull-up history</span><strong>${enabled ? 'Active' : 'Paused, not reset'}</strong></div></div><div class="equipment-status-grid modal-equipment-grid">${Object.entries(pullupStatusLabels).map(([value,label]) => `<button class="choice-button ${state.equipment.pullUpBarStatus === value ? 'selected-equipment-status' : ''}" data-pullup-status="${value}"><strong>${label}</strong><span>${value === 'installed-available' ? 'Complete safety confirmation to activate' : value === 'temporarily-unavailable' ? 'Use the fallback without resetting pull-up progress' : value === 'owned-not-installed' ? 'Default until installation' : 'Keep pull-up programming locked'}</span></button>`).join('')}</div><div class="choice-list"><a class="choice-button" href="https://www.youtube.com/watch?v=aNUSgyWRJYA" target="_blank" rel="noopener noreferrer"><strong>Beginner pull-up tutorial</strong><span>FitnessFAQs · YouTube ↗</span></a>${enabled ? '<button class="choice-button" data-action="choose-pullup-level"><strong>Change progression rung</strong><span>Start with what you can control</span></button>' : ''}</div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Pull-up bar status</span><h2 id="modalTitle">Use what is actually available</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Pull-up programming appears only when the bar is installed, available and safety-confirmed. Otherwise, Workout C uses a dumbbell pullover.</p><div class="import-summary"><div><span>Current status</span><strong>${current}</strong></div><div><span>Workout C now</span><strong>${enabled ? 'Pull-up progression' : 'Dumbbell pullover'}</strong></div><div><span>Pull-up history</span><strong>${enabled ? 'Active' : 'Paused, not reset'}</strong></div></div><div class="equipment-status-grid modal-equipment-grid" role="group" aria-labelledby="modalTitle">${Object.entries(pullupStatusLabels).map(([value,label]) => renderChoice({family:'pullup-status',attributes:`data-pullup-status="${value}"`,label,description:value === 'installed-available' ? 'Complete safety confirmation to activate' : value === 'temporarily-unavailable' ? 'Use the fallback without resetting pull-up progress' : value === 'owned-not-installed' ? 'Default until installation' : 'Keep pull-up programming locked',selected:state.equipment.pullUpBarStatus===value})).join('')}</div><div class="choice-list"><a class="choice-button" href="https://www.youtube.com/watch?v=aNUSgyWRJYA" target="_blank" rel="noopener noreferrer"><strong>Beginner pull-up tutorial</strong><span>FitnessFAQs · YouTube ↗</span></a>${enabled ? '<button class="choice-button" data-action="choose-pullup-level"><strong>Change progression rung</strong><span>Start with what you can control</span></button>' : ''}</div>`);
   modalContent.querySelectorAll('[data-pullup-status]').forEach(button => button.addEventListener('click', async () => {
     const value = button.dataset.pullupStatus;
     if (value === 'installed-available') { closeModal(); renderPullupSafetyConfirmation(); return; }
@@ -1378,7 +1419,7 @@ async function applyScheduleChoice(choice) {
 
 function chooseSchedule() {
   const canTransition = state.programme.activePhase !== 'foundation' || state.programme.weekFourReview?.available;
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">Schedule mode</span><h2 id="modalTitle">Choose the frequency that fits your life</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Switching schedule mode preserves history, exercise progression, measurements, and any active workout snapshot.</p><div class="track-grid"><button class="track-card recommended" data-schedule-choice="lean-athletic-four-day" ${canTransition ? '' : 'disabled'}><small>DEFAULT RECOMMENDATION</small><h3>Four-day Lean Athletic</h3><p>Lower A → Upper A → Lower B → Upper B</p><strong>4 required strength days + optional E</strong></button><button class="track-card" data-schedule-choice="lean-athletic-three-day" ${canTransition ? '' : 'disabled'}><small>PERMANENT FALLBACK</small><h3>Three-day Lean Athletic</h3><p>Full Body A → B → C</p><strong>3 required strength days</strong></button></div>${canTransition ? '' : '<div class="conflict-card"><strong>Comparison only for now</strong><p>The Foundation transition becomes available with the end-of-Week-4 review.</p></div>'}`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">Schedule mode</span><h2 id="modalTitle">Choose the frequency that fits your life</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>Switching schedule mode preserves history, exercise progression, measurements, and any active workout snapshot.</p><div class="track-grid" role="group" aria-labelledby="modalTitle">${renderChoice({className:'track-card recommended',family:'programme-mode',attributes:'data-schedule-choice="lean-athletic-four-day"',label:'Four-day Lean Athletic',description:'Lower A → Upper A → Lower B → Upper B · 4 required strength days + optional E',badge:'DEFAULT RECOMMENDATION',selected:state.programme.scheduleMode==='lean-athletic-four-day',disabled:!canTransition})}${renderChoice({className:'track-card',family:'programme-mode',attributes:'data-schedule-choice="lean-athletic-three-day"',label:'Three-day Lean Athletic',description:'Full Body A → B → C · 3 required strength days',badge:'PERMANENT FALLBACK',selected:state.programme.scheduleMode==='lean-athletic-three-day',disabled:!canTransition})}</div>${canTransition ? '' : '<div class="conflict-card"><strong>Comparison only for now</strong><p>The Foundation transition becomes available with the end-of-Week-4 review.</p></div>'}`);
   modalContent.querySelectorAll('[data-schedule-choice]').forEach(button => button.addEventListener('click', () => { if (!button.disabled) applyScheduleChoice(button.dataset.scheduleChoice); }));
 }
 
@@ -1403,7 +1444,7 @@ function weekFourReview() {
 
 function showWeekFourReview(review) {
   const labels = { ready:'Ready to choose the next schedule', 'extend-one-week':'Consider one more Foundation week', 'extend-two-weeks':'Consider two more Foundation weeks' };
-  openModal(`<div class="modal-heading"><div><span class="eyebrow">System recommendation</span><h2 id="modalTitle">${labels[review.recommendation]}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This is not a medical assessment and does not claim to evaluate technique through the screen.</p><div class="import-summary"><div><span>Required sessions</span><strong>${review.completedWorkoutCount} / ${review.plannedWorkoutCount}</strong></div><div><span>Recommendation</span><strong>${review.recommendation}</strong></div><div><span>User decision</span><strong>${review.userDecision||'Not chosen'}</strong></div></div><div class="conflict-card"><strong>Why</strong><p>${(review.reasons||[]).join(' ')}</p></div><div class="modal-actions"><button class="button button-ghost" data-review-choice="extend-two-weeks">Extend 2 weeks</button><button class="button button-secondary" data-review-choice="extend-one-week">Extend 1 week</button><button class="button button-primary" data-action="choose-schedule">Choose Lean Athletic schedule</button></div>`);
+  openModal(`<div class="modal-heading"><div><span class="eyebrow">System recommendation</span><h2 id="modalTitle">${labels[review.recommendation]}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>This is not a medical assessment and does not claim to evaluate technique through the screen.</p><div class="import-summary"><div><span>Required sessions</span><strong>${review.completedWorkoutCount} / ${review.plannedWorkoutCount}</strong></div><div><span>Recommendation</span><strong>${review.recommendation}</strong></div><div><span>User decision</span><strong>${review.userDecision||'Not chosen'}</strong></div></div><div class="conflict-card"><strong>Why</strong><p>${(review.reasons||[]).join(' ')}</p></div><div class="choice-list review-decision-list" role="group" aria-label="Foundation review decision">${renderChoice({family:'week-four-decision',attributes:'data-review-choice="extend-two-weeks"',label:'Extend 2 weeks',description:'Continue Foundation without resetting rotation or progression',selected:review.userDecision==='extend-two-weeks'})}${renderChoice({family:'week-four-decision',attributes:'data-review-choice="extend-one-week"',label:'Extend 1 week',description:'Continue Foundation for one additional evidence week',selected:review.userDecision==='extend-one-week'})}</div><div class="modal-actions"><button class="button button-primary" data-action="choose-schedule">Choose Lean Athletic schedule</button></div>`);
   modalContent.querySelectorAll('[data-review-choice]').forEach(button => button.addEventListener('click', () => applyScheduleChoice(button.dataset.reviewChoice)));
   modalContent.querySelector('[data-action="choose-schedule"]')?.addEventListener('click', () => { closeModal(); chooseSchedule(); });
 }
@@ -1705,7 +1746,7 @@ async function testRunCoach() {
   }
 }
 function runModeCard(mode, title, description, badge='') {
-  return `<button class="run-audio-mode ${state.run.audioMode === mode ? 'selected' : ''}" data-run-audio-mode="${mode}"><span><small>${badge}</small><strong>${title}</strong><p>${description}</p></span><b>${state.run.audioMode === mode ? 'SELECTED' : 'CHOOSE'}</b></button>`;
+  return renderChoice({className:'run-audio-mode',family:'run-guidance',attributes:`data-run-audio-mode="${mode}"`,label:title,description,badge,selected:state.run.audioMode===mode});
 }
 function runOfflineLabel() {
   if (state.run.offlineStatus === 'downloading') {
@@ -1842,7 +1883,7 @@ function bindGlobalActions() {
 }
 
 document.querySelectorAll('[data-plan-view]').forEach(button => button.addEventListener('click', () => {
-  document.querySelectorAll('[data-plan-view]').forEach(x => x.classList.toggle('selected', x === button));
+  document.querySelectorAll('[data-plan-view]').forEach(x => { const selected=x===button; x.classList.toggle('selected',selected); x.setAttribute('aria-pressed',String(selected)); });
   document.getElementById('mealPlanView').classList.toggle('hidden', button.dataset.planView !== 'meals');
   document.getElementById('weekPlanView').classList.toggle('hidden', button.dataset.planView !== 'week');
   document.getElementById('blockPlanView').classList.toggle('hidden', button.dataset.planView !== 'blocks');

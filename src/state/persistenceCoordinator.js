@@ -19,7 +19,17 @@ export class PersistenceCoordinator {
   saveCheckIn(value) { return this.repos.checkIns.put({ id:localDate(),localDate:localDate(),...value }); }
   saveMeasurement(type,value,note='') { return this.repos.measurements.put({ id:newId('measurement'),localDate:localDate(),type,value,note }); }
   saveProgression(value) { return this.repos.progression.put({ id:`${value.exerciseId}@${value.exerciseVersion}`,...value }); }
-  async startWorkout(snapshot, execution={}) { const now=new Date().toISOString(); const record=timestamped({ id:newId('workout'),localDate:localDate(),status:'active',workoutSnapshot:snapshot,workoutNameSnapshot:snapshot.workoutName,exercisesSnapshot:snapshot.exercises,equipmentSnapshot:snapshot.equipmentSnapshot,pullUpAvailabilitySnapshot:snapshot.pullUpAvailabilitySnapshot,programmeId:snapshot.programmeId,programmeVersion:snapshot.programmeVersion,programmePhase:snapshot.programmePhase,scheduleMode:snapshot.scheduleMode,templateSetId:snapshot.templateSetId,templateSetVersion:snapshot.templateSetVersion,templateId:snapshot.templateId,templateVersion:snapshot.templateVersion,startedAt:now,currentExerciseIndex:0,currentSetIndex:0,completedSets:{},calibration:{},substitutions:{},readiness:{},restDeadline:null,...execution},now); await this.db.activeWorkoutSessions.put(record); return record; }
+  async startWorkout(snapshot, execution={}) {
+    const now=new Date().toISOString(); const today=localDate();
+    return this.db.transaction('rw',this.db.activeWorkoutSessions,this.db.workoutSessions,async()=>{
+      const completed=await this.db.workoutSessions.where('localDate').equals(today).filter(record=>record.status==='completed'&&record.templateId===snapshot.templateId).first();
+      if(completed){const error=new Error('This workout has already been completed.');error.name='WorkoutAlreadyCompletedError';throw error;}
+      const existing=await this.db.activeWorkoutSessions.where('templateId').equals(snapshot.templateId).filter(record=>record.localDate===today&&['active','paused'].includes(record.status)).first();
+      if(existing) return existing;
+      const record=timestamped({ id:newId('workout'),localDate:today,status:'active',workoutSnapshot:snapshot,workoutNameSnapshot:snapshot.workoutName,exercisesSnapshot:snapshot.exercises,equipmentSnapshot:snapshot.equipmentSnapshot,pullUpAvailabilitySnapshot:snapshot.pullUpAvailabilitySnapshot,programmeId:snapshot.programmeId,programmeVersion:snapshot.programmeVersion,programmePhase:snapshot.programmePhase,scheduleMode:snapshot.scheduleMode,templateSetId:snapshot.templateSetId,templateSetVersion:snapshot.templateSetVersion,templateId:snapshot.templateId,templateVersion:snapshot.templateVersion,startedAt:now,currentExerciseIndex:0,currentSetIndex:0,completedSets:{},calibration:{},substitutions:{},readiness:{},restDeadline:null,...execution},now);
+      await this.db.activeWorkoutSessions.put(record); return record;
+    });
+  }
   async updateWorkout(id,patch) { const current=await this.repos.activeWorkouts.get(id); if(!current) throw new Error('Active workout could not be found.'); return this.repos.activeWorkouts.put({ ...current,...patch }); }
   async updateWorkoutAndProgression(id,patch,progression) {
     return this.db.transaction('rw',this.db.activeWorkoutSessions,this.db.exerciseProgressionStates,async()=>{

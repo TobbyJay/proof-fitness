@@ -55,10 +55,10 @@ test('active workout snapshot, load, substitution, sets and rest recover', async
 
   await page.reload();
   await expect(page.getByRole('heading', { name: /Continue Full Body A/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Resume workout' })).toBeVisible();
+  await expect(page.locator('#resumeWorkout')).toBeVisible();
   await expect(page.getByRole('button', { name: 'End as partial' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Discard' })).toBeVisible();
-  await page.getByRole('button', { name: 'Resume workout' }).click();
+  await page.locator('#resumeWorkout').click();
   await expect(page.getByRole('button', { name: 'Start next set' })).toBeVisible();
 
   const storage=await context.storageState({indexedDB:true});

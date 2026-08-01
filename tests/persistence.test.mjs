@@ -69,6 +69,22 @@ test('active workout snapshot, actions, and Foundation rotation persist',async t
   reopened.close();
 });
 
+test('workout start is idempotent and rejects a completed same-day occurrence',async t=>{
+  const {db,persistence}=await context(t,'duplicate-workout-start');
+  const programme=await persistence.completeOnboarding(onboardingInput());
+  const snapshot=createWorkoutSnapshot({template:getWorkoutTemplate('foundation-b'),programmeVersion:programme.programmeVersion,programmePhase:programme.activePhase,scheduleMode:programme.scheduleMode,equipment:DEFAULT_EQUIPMENT,pullUpRung:2});
+  const [first,second]=await Promise.all([persistence.startWorkout(snapshot),persistence.startWorkout(snapshot)]);
+  assert.equal(first.id,second.id);
+  assert.equal(await persistence.repos.activeWorkouts.count(),1);
+  await persistence.completeWorkout(first,{...programme,lastCompletedRequiredTemplateId:'foundation-b'});
+  await assert.rejects(()=>persistence.startWorkout(snapshot),error=>error.name==='WorkoutAlreadyCompletedError'&&error.message==='This workout has already been completed.');
+  assert.equal(await persistence.repos.activeWorkouts.count(),0);
+  assert.equal(await persistence.repos.workouts.count(),1);
+  assert.equal(await persistence.repos.progression.count(),0);
+  const hydrated=await hydrateState(db);
+  assert.equal(nextRequiredWorkout({scheduleMode:hydrated.programme.scheduleMode,activeTemplateSetId:hydrated.programme.activeTemplateSetId,lastCompletedTemplateId:hydrated.programme.lastCompletedRequiredTemplateId,activeWorkoutSnapshot:null}).templateId,'foundation-c');
+});
+
 test('meals, check-ins, measurements, progression, reviews, transitions, equipment, and runs persist',async t=>{
   const {db,persistence}=await context(t,'records');
   const programme=await persistence.completeOnboarding(onboardingInput());
