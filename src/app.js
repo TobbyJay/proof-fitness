@@ -1,5 +1,11 @@
-import starterRun from '../audio-scripts/starter-run.json';
 import { phaseAtTime, phaseIndexAtTime } from './run-phase.js';
+import { getRunTemplate } from './domain/running/runTemplates.js';
+import { getRunStage, nextRunStage } from './domain/running/runStages.js';
+import { createRunSessionSnapshot, isRunEffortResult, runCompletionAt } from './domain/running/runEvidence.js';
+import { decideRunProgression, setQualityRunOptIn } from './domain/running/runProgression.js';
+import { nextRunMilestone } from './domain/running/runMilestones.js';
+import { todayRunRecommendation } from './domain/running/runRecommendations.js';
+import { isLowerBodyStrengthTemplate, runningFrequencyForProgramme } from './domain/running/runScheduling.js';
 import { DEFAULT_EQUIPMENT, normaliseEquipment } from './domain/equipment/equipmentCatalog.js';
 import { EquipmentWeightSource, weightSourceLabel } from './domain/equipment/equipmentWeight.js';
 import { getExercise } from './domain/exercises/exerciseCatalog.js';
@@ -26,13 +32,7 @@ import { localDate, newId } from './db/transactions.js';
 import { calculateDerived } from './state/hydrateState.js';
 import { deriveWorkoutCTA } from './state/deriveWorkoutCTA.js';
 
-const RUN_CACHE_NAME = 'proof-fitness-v1.1.0';
-const RUN_AUDIO = {
-  opus: '/audio/coach/starter-run-coach.opus',
-  mp3: '/audio/coach/starter-run-coach.mp3',
-  chimes: '/audio/chimes/starter-run-chimes.opus'
-};
-
+const RUN_CACHE_NAME = 'proof-fitness-v1.2.0';
 function renderChoice({
   className = 'choice-button', family, attributes = '', label, description = '',
   selected = false, disabled = false, badge = '', compact = false
@@ -92,14 +92,6 @@ const pullupLevels = PULL_UP_RUNGS.map(rung => {
 });
 
 
-const runPhases = starterRun.phases.map((phase) => ({
-  ...phase,
-  mode: phase.type === 'easy-run' ? 'run' : phase.type === 'cool-down-walk' ? 'cooldown' : 'walk',
-  start: phase.startSeconds,
-  end: phase.startSeconds + phase.durationSeconds
-}));
-const RUN_TOTAL_SECONDS = starterRun.durationSeconds;
-
 const state = {
   screen: 'today',
   theme: 'dark',
@@ -113,6 +105,7 @@ const state = {
   measurements: [],
   workoutRecords: [],
   runHistory: [],
+  runningProgression:null,
   mealChecks: [],
   checkIns: [],
   progression: [],
@@ -155,6 +148,7 @@ const state = {
   programme: createProgrammeState(),
   run: {
     id: null,
+    templateId:'run-walk-stage-01',
     active: false,
     step: 'overview',
     completed: false,
@@ -167,7 +161,11 @@ const state = {
     phaseIndex: 0,
     paused: false,
     lockScreenConfirmed: false,
-    keepAwake: false
+    keepAwake: false,
+    effortResult:null,
+    discomfortFlag:false,
+    completionDraft:null,
+    resultSaved:false
   },
   settings: {
     restSoundEnabled: true,
@@ -666,6 +664,8 @@ function applyHydratedState(hydrated) {
   state.measurements=hydrated.measurements||[];
   state.workoutRecords=hydrated.workouts||[];
   state.runHistory=hydrated.runs||[];
+  state.runningProgression=hydrated.runningProgression||state.runningProgression;
+  state.run.templateId=state.runningProgression?.currentStageId||'run-walk-stage-01';
   state.mealChecks=hydrated.mealChecks||[];
   state.checkIns=hydrated.checkIns||[];
   state.progression=hydrated.progression||[];
@@ -691,7 +691,7 @@ function applyHydratedState(hydrated) {
     state.settings.vibrationEnabled=hydrated.preferences.vibrationEnabled!==false;
   }
   if(hydrated.activeWorkout) restoreActiveWorkout(hydrated.activeWorkout);
-  const activeRun=state.runHistory.find(item=>item.status==='active'||item.status==='paused');
+  const activeRun=state.runHistory.find(item=>['active','paused','awaiting-result'].includes(item.status)&&safeRunTemplate(item));
   if(activeRun) restoreActiveRun(activeRun);
 }
 
@@ -714,16 +714,18 @@ function restoreActiveWorkout(record) {
 }
 
 function restoreActiveRun(record) {
-  Object.assign(state.run,{id:record.id,active:true,completed:false,step:'active',paused:true,
+  const awaitingResult=record.status==='awaiting-result';
+  Object.assign(state.run,{id:record.id,active:!awaitingResult,completed:false,step:awaitingResult?'result':'active',paused:true,
+    templateId:record.runTemplateId||record.templateId||'run-walk-stage-01',
     audioMode:record.guidanceMode||'voice',phaseIndex:record.currentPhaseIndex||0,
-    visualElapsedBeforePause:record.audioPositionSeconds||0});
+    visualElapsedBeforePause:record.audioPositionSeconds||0,completionDraft:awaitingResult?{status:record.intendedStatus||'partial',audioPositionSeconds:record.audioPositionSeconds||0,completedDurationSeconds:record.completedDurationSeconds,completedRunSeconds:record.completedRunSeconds,completedWalkSeconds:record.completedWalkSeconds,completedPhases:record.completedPhases,completedAt:record.completedAt}:null});
 }
 
 function renderHistory() {
   const list=document.getElementById('historyList'); if(!list) return;
   const records=[...state.workoutRecords.filter(item=>['completed','partial'].includes(item.status)).map(item=>({
     date:item.localDate,title:item.workoutNameSnapshot||item.workoutSnapshot?.workoutName||item.templateId,type:item.status==='partial'?'Partial strength':'Strength',detail:`${item.templateId} · ${item.status}`
-  })),...state.runHistory.filter(item=>item.status==='completed').map(item=>({date:item.localDate,title:starterRun.name,type:'Run–walk',detail:`${formatTime(Math.floor(item.audioPositionSeconds||RUN_TOTAL_SECONDS))} · ${item.guidanceMode||'voice'}`}))]
+  })),...state.runHistory.filter(item=>['completed','partial'].includes(item.status)).map(item=>{const template=safeRunTemplate(item);return {date:item.localDate,title:template?.name||'Historical run · template unknown',type:item.status==='partial'?'Partial run':'Run',detail:`${formatTime(Math.floor(item.completedDurationSeconds??item.audioPositionSeconds??0))} · ${item.effortResult?item.effortResult.replaceAll('-',' '):'effort not recorded'} · ${formatTime(item.completedRunSeconds||0)} running`};})]
     .sort((a,b)=>b.date.localeCompare(a.date));
   list.innerHTML=records.length?records.map(item=>`<article class="history-card"><div><span class="eyebrow">${item.type}</span><h2>${item.title}</h2><p>${item.detail}</p></div><time>${item.date}</time></article>`).join(''):'<section class="insight-banner"><h2>No activity yet.</h2><p>Completed workouts and runs will appear here after they are saved.</p></section>';
   const count=document.getElementById('historyCount'); if(count) count.textContent=`${records.length} session${records.length===1?'':'s'}`;
@@ -765,6 +767,25 @@ async function handleStoredProgressionDecision(exerciseId,decision) {
   } catch(error){showPersistenceError(error);}
 }
 
+function safeRunTemplate(record){try{return getRunTemplate(typeof record==='string'?record:record?.runTemplateId||record?.templateId);}catch{return null;}}
+function currentRunTemplate(){return getRunTemplate(state.run.templateId||state.runningProgression?.currentStageId||'run-walk-stage-01');}
+function currentRunPhases(){return currentRunTemplate().phases.map(item=>({...item,mode:['easy-run','controlled-run'].includes(item.type)?'run':item.type==='cool-down-walk'?'cooldown':'walk',start:item.startSeconds,end:item.endSeconds}));}
+function runStructure(template=currentRunTemplate()){
+  return template.kind==='run-walk'?`${template.rounds} × ${formatTime(template.runSecondsPerRound)} run / ${formatTime(template.walkSecondsPerRound)} walk`:template.kind==='controlled-quality'?`${template.rounds} × controlled 1:00 / easy 2:00`:`${Math.round(template.plannedRunSeconds/60)} min continuous easy run`;
+}
+function currentTodayRunRecommendation(qualityRequested=false){
+  const latestStrength=[...state.workoutRecords].filter(item=>item.status==='completed').sort((a,b)=>String(a.completedAt).localeCompare(String(b.completedAt))).at(-1);
+  return todayRunRecommendation({progressionState:state.runningProgression,readiness:state.readiness,programme:state.programme,recentLowerBodyWorkout:isLowerBodyStrengthTemplate(latestStrength?.templateId),upcomingLowerBodyWorkout:isLowerBodyStrengthTemplate(nextWorkoutTemplate().id),qualityRequested});
+}
+function renderTodayRunningCard(){
+  const card=document.getElementById('todayRunningCard');if(!card||!state.runningProgression)return;
+  const stage=getRunStage(state.runningProgression.currentStageId);const template=getRunTemplate(stage.templateId);const recommendation=currentTodayRunRecommendation();const frequency=runningFrequencyForProgramme(state.programme,state.runningProgression);
+  const recovery=recommendation.recommendedActivity==='brisk-walk-or-mobility';
+  card.innerHTML=`<div class="section-heading-row"><div><span class="eyebrow">${recovery?'Recovery recommendation':'Optional conditioning'}</span><h2>${recovery?'Keep today easy':`Run Stage ${template.stageNumber||'Base'} · ${template.name}`}</h2></div><span class="status-pill neutral">${frequency.intent.replaceAll('-',' ')}</span></div><p>${recovery?recommendation.reason:`${formatTime(template.durationSeconds)} · ${runStructure(template)}`}</p><div class="import-summary"><div><span>Current recommendation</span><strong>${recovery?'Brisk walk or mobility':state.runningProgression.pendingRecommendation?.type==='progress'?'Progression available':state.runningProgression.pendingRecommendation?.reason||'Current stage'}</strong></div><div><span>Strength streak</span><strong>Never gated by running</strong></div></div><div class="button-row"><button class="button button-primary" data-action="preview-run">${recovery?'Review running level':'Start run'}</button><button class="button button-secondary" data-recovery-choice="brisk-walk">Choose walk</button><button class="button button-ghost" data-recovery-choice="mobility">Choose mobility</button></div>`;
+  card.querySelector('[data-action="preview-run"]')?.addEventListener('click',openRunOverview);
+  card.querySelectorAll('[data-recovery-choice]').forEach(button=>button.addEventListener('click',()=>showToast(`${button.dataset.recoveryChoice==='brisk-walk'?'Brisk walk':'Mobility'} selected. Your running stage and strength rotation are unchanged.`)));
+}
+
 function updateAll() {
   recalculateDerived();
   renderTodayMeals();
@@ -777,7 +798,9 @@ function updateAll() {
   renderHistory();
   renderMeasurements();
   renderProgressionEvidence();
+  renderTodayRunningCard();
   renderEquipmentSettings();
+  injectWeeklyCoach();
 }
 
 function updateProgrammeUI() {
@@ -1040,10 +1063,11 @@ function updateActiveWorkoutStrip() {
 }
 
 function injectWeeklyCoach() {
-  if (document.getElementById('weeklyCoach')) return;
+  document.getElementById('weeklyCoach')?.remove();
   const metrics = document.querySelector('[data-screen="progress"] .metric-strip');
-  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Build real evidence first.</h2><p>Recommendations stay unavailable until persisted sessions, check-ins, meals, and measurements support a conclusion.</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence</button></section>`);
-  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">${state.workoutRecords.length?'Saved evidence':'No supported trend yet'}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Completed workouts</span><strong>${state.derived.completedWorkouts}</strong></div><div><span>Calibration exercises</span><strong>${Object.keys(state.programme.calibrationByExerciseId).length}</strong></div><div><span>Measurements</span><strong>${state.measurements.length}</strong></div></div><div class="conflict-card"><strong>Evidence remains exercise-specific</strong><p>No load or schedule change is made silently. More consistent records are needed before a weekly recommendation is shown.</p></div>`));
+  const controlledRuns=state.runHistory.filter(item=>item.status==='completed'&&['comfortable','challenging-controlled'].includes(item.effortResult));const runMessage=state.runningProgression?.qualitySessionUnlocked?'Strength is consistent and the continuous base is stable. Optional controlled quality training can be enabled.':state.runningProgression?.pendingRecommendation?.type==='progress'?`${controlledRuns.length} controlled runs recorded. ${getRunTemplate(state.runningProgression.pendingRecommendation.toStageId).name} is available.`:state.runHistory.at(-1)?.effortResult==='too-hard'?'The latest run was too hard. Repeat the current stage and protect lower-body recovery.':'Build controlled running evidence alongside strength.';
+  metrics?.insertAdjacentHTML('afterend', `<section id="weeklyCoach" class="weekly-coach"><div><span class="eyebrow">Weekly coaching review</span><h2>Evidence across strength and running.</h2><p>${runMessage}</p></div><button class="button button-primary coach-action" id="openWeeklyReview">Review evidence</button></section>`);
+  document.getElementById('openWeeklyReview')?.addEventListener('click', () => openModal(`<div class="modal-heading"><div><span class="eyebrow">Weekly review</span><h2 id="modalTitle">${state.workoutRecords.length||state.runHistory.length?'Saved evidence':'No supported trend yet'}</h2></div><button class="modal-close" data-action="close-modal">×</button></div><div class="import-summary"><div><span>Completed workouts</span><strong>${state.derived.completedWorkouts}</strong></div><div><span>Controlled runs</span><strong>${controlledRuns.length}</strong></div><div><span>Current running</span><strong>${getRunTemplate(state.runningProgression.currentStageId).name}</strong></div><div><span>Measurements</span><strong>${state.measurements.length}</strong></div></div><div class="conflict-card"><strong>Strength remains primary</strong><p>${runMessage} No load, stage, or schedule change is made silently.</p></div>`));
 }
 
 function renderWorkout() {
@@ -1582,7 +1606,7 @@ async function applyScheduleChoice(choice) {
     const programme = applyFoundationExtension({ ...state.programme, weekFourReview:reviewWithDecision }, choice === 'extend-one-week' ? 1 : 2);
     const review=currentReview?{...currentReview,userDecision:choice}:null;
     try{await persistence.saveProgrammeDecision(programme,{review});}catch(error){return showPersistenceError(error);}
-    state.programme=programme; if(review) state.reviews=upsertById(state.reviews,review);
+    state.programme=programme;state.runningProgression.frequencyIntent=runningFrequencyForProgramme(programme,state.runningProgression).intent;if(review) state.reviews=upsertById(state.reviews,review);
     closeModal(); updateAll(); showToast(`Foundation extended by ${state.programme.foundationExtensionWeeks} week${state.programme.foundationExtensionWeeks === 1 ? '' : 's'}; A → B → C and all evidence continue.`); return;
   }
   const leavingFoundation = state.programme.activePhase === 'foundation';
@@ -1593,7 +1617,7 @@ async function applyScheduleChoice(choice) {
   programme.weekFourReview = { ...programme.weekFourReview, userDecision:choice };
   const review=currentReview?{...currentReview,userDecision:choice}:null;
   try{await persistence.saveProgrammeDecision(programme,{review,transition});}catch(error){return showPersistenceError(error);}
-  state.programme=programme; state.transitions.push(transition); if(review) state.reviews=upsertById(state.reviews,review);
+  state.programme=programme;state.runningProgression.frequencyIntent=runningFrequencyForProgramme(programme,state.runningProgression).intent;state.transitions.push(transition); if(review) state.reviews=upsertById(state.reviews,review);
   closeModal(); updateAll(); showToast(`${choice === 'lean-athletic-four-day' ? 'Four-day' : 'Permanent three-day'} Lean Athletic will begin with the next workout.`);
 }
 
@@ -1653,38 +1677,39 @@ let runWakeLock = null;
 
 function runAudioElement() { return document.getElementById('runCoachAudio'); }
 function runAudioUrl(mode = state.run.audioMode) {
-  const audio = runAudioElement();
-  if (mode === 'chimes') return RUN_AUDIO.chimes;
+  const audio = runAudioElement(); const assets=currentRunTemplate().audio;
+  if (mode === 'chimes') return assets.chimes;
   if (mode !== 'voice') return '';
   const opusSupported = Boolean(audio?.canPlayType('audio/ogg; codecs="opus"'));
-  state.run.audioFormat = opusSupported ? 'opus' : 'mp3';
-  return opusSupported ? RUN_AUDIO.opus : RUN_AUDIO.mp3;
+  state.run.audioFormat = opusSupported||!assets.mp3 ? 'opus' : 'mp3';
+  return opusSupported||!assets.mp3 ? assets.voice : assets.mp3;
 }
 function currentRunTime() {
+  const total=currentRunTemplate().durationSeconds;
   const audio = runAudioElement();
   if (state.run.audioMode !== 'visual' && audio && Number.isFinite(audio.currentTime)) {
     if (state.run.paused && audio.currentTime === 0 && state.run.visualElapsedBeforePause > 0) return state.run.visualElapsedBeforePause;
     return audio.currentTime;
   }
-  return state.run.visualStartedAt ? Math.min(RUN_TOTAL_SECONDS, state.run.visualElapsedBeforePause + (Date.now() - state.run.visualStartedAt) / 1000) : (state.run.visualElapsedBeforePause || 0);
+  return state.run.visualStartedAt ? Math.min(total, state.run.visualElapsedBeforePause + (Date.now() - state.run.visualStartedAt) / 1000) : (state.run.visualElapsedBeforePause || 0);
 }
 function currentRunPhase(time = currentRunTime()) {
-  return phaseAtTime(runPhases, time) || runPhases[runPhases.length - 1];
+  const phases=currentRunPhases();return phaseAtTime(phases, time) || phases[phases.length - 1];
 }
 function runPhaseIndex(time = currentRunTime()) {
-  return Math.max(0, phaseIndexAtTime(runPhases, time));
+  return Math.max(0, phaseIndexAtTime(currentRunPhases(), time));
 }
 function configureRunMediaSession() {
   if (!('mediaSession' in navigator)) return;
   try {
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: state.run.audioMode === 'voice' ? 'Run–Walk 01 · Voice Coach' : 'Run–Walk 01 · Phase Chimes',
-      artist: 'Proof', album: 'Lean Athletic · Block 1'
+      title: `${currentRunTemplate().name} · ${state.run.audioMode === 'voice'?'Voice Coach':'Phase Chimes'}`,
+      artist: 'Proof Fitness', album: `Running Programme v${state.runningProgression?.runProgramVersion||1}`
     });
     navigator.mediaSession.setActionHandler('play', resumeRunAudio);
     navigator.mediaSession.setActionHandler('pause', pauseRunAudio);
     navigator.mediaSession.setActionHandler('seekbackward', () => seekRun(Math.max(0, currentRunTime() - 15)));
-    navigator.mediaSession.setActionHandler('seekforward', () => seekRun(Math.min(RUN_TOTAL_SECONDS, currentRunTime() + 15)));
+    navigator.mediaSession.setActionHandler('seekforward', () => seekRun(Math.min(currentRunTemplate().durationSeconds, currentRunTime() + 15)));
     navigator.mediaSession.setActionHandler('seekto', details => { if (typeof details.seekTime === 'number') seekRun(details.seekTime); });
   } catch (_) {}
 }
@@ -1711,10 +1736,10 @@ function prepareRunAudio() {
 }
 
 function offlineResourcesForMode(mode = state.run.audioMode) {
-  const shared = ['/audio/coach/starter-run-coach.manifest.json', '/audio-scripts/starter-run.json'];
-  if (mode === 'voice') return [...shared, RUN_AUDIO.opus, RUN_AUDIO.mp3];
-  if (mode === 'chimes') return [...shared, RUN_AUDIO.chimes];
-  return shared;
+  const assets=currentRunTemplate().audio;const shared = [assets.manifest,assets.script];
+  if (mode === 'voice') return [...shared,assets.voice,assets.mp3].filter(Boolean);
+  if (mode === 'chimes') return [...shared,assets.chimes].filter(Boolean);
+  return shared.filter(Boolean);
 }
 
 async function refreshRunOfflineStatus() {
@@ -1800,15 +1825,18 @@ async function downloadRunAudio() {
   renderRun();
 }
 async function openRunOverview() {
-  if (state.run.completed) state.run.id = null;
+  if (state.run.completed){state.run.id=null;state.run.templateId=state.runningProgression.currentStageId;}
   state.run.step = 'overview'; state.run.completed = false;
   renderRun(); showScreen('run');
   refreshRunOfflineStatus();
 }
-async function startRunSession() {
-  const id=state.run.id||newId('run'); const startedAt=new Date().toISOString();
-  try{const record=await persistence.saveRun({id,status:'active',startedAt,audioPositionSeconds:0,currentPhaseIndex:0,paused:false,guidanceMode:state.run.audioMode,lastPersistedAt:startedAt});state.runHistory=upsertById(state.runHistory,record);state.run.id=id;}catch(error){return showPersistenceError(error);}
+async function startRunSession(templateId = state.runningProgression.currentStageId) {
+  const id=state.run.id||newId('run'); const startedAt=new Date().toISOString();state.run.templateId=templateId;
+  const readinessRecommendation=currentTodayRunRecommendation(templateId==='controlled-intervals-01');
+  const snapshot=createRunSessionSnapshot({id,templateId:state.run.templateId,startedAt,guidanceMode:state.run.audioMode,progressionState:state.runningProgression,readinessRecommendation});
+  try{const record=await persistence.saveRun({...snapshot,status:'active',audioPositionSeconds:0,currentPhaseIndex:0,paused:false,lastPersistedAt:startedAt});state.runHistory=upsertById(state.runHistory,record);state.run.id=id;}catch(error){return showPersistenceError(error);}
   state.run.active = true; state.run.completed = false; state.run.step = 'active'; state.run.paused = false;
+  state.run.effortResult=null;state.run.discomfortFlag=false;state.run.completionDraft=null;state.run.resultSaved=false;
   prepareRunAudio();
   if (state.run.audioMode === 'visual') {
     state.run.visualStartedAt = Date.now();
@@ -1834,25 +1862,25 @@ async function startRunSession() {
   renderRun(); showScreen('run'); updateAll();
 }
 function updateRunUi() {
-  const time = currentRunTime();
+  const time = currentRunTime();const total=currentRunTemplate().durationSeconds;
   state.run.phaseIndex = runPhaseIndex(time);
   if(state.run.id&&Date.now()-(state.run.lastPersistedAt||0)>=5000){state.run.lastPersistedAt=Date.now();persistRunProgress(state.run.paused?'paused':'active').catch(showPersistenceError);}
   const elapsed = document.getElementById('runElapsed'); if (elapsed) elapsed.textContent = formatTime(Math.floor(time));
   if ('mediaSession' in navigator && state.run.audioMode !== 'visual' && navigator.mediaSession.setPositionState) {
     try {
       navigator.mediaSession.setPositionState({
-        duration: RUN_TOTAL_SECONDS,
+        duration: total,
         playbackRate: runAudioElement()?.playbackRate || 1,
-        position: Math.min(time, RUN_TOTAL_SECONDS)
+        position: Math.min(time, total)
       });
     } catch (_) {}
   }
-  if (time >= RUN_TOTAL_SECONDS || (state.run.audioMode !== 'visual' && runAudioElement()?.ended)) finishRunSession(true);
+  if (time >= total || (state.run.audioMode !== 'visual' && runAudioElement()?.ended)) finishRunSession(true);
   else if (state.screen === 'run' && state.run.step === 'active') renderRun();
   updateActiveRunStrip();
 }
 function seekRun(time) {
-  const bounded = Math.max(0, Math.min(RUN_TOTAL_SECONDS, time));
+  const bounded = Math.max(0, Math.min(currentRunTemplate().durationSeconds, time));
   const audio = runAudioElement();
   if (state.run.audioMode === 'visual') {
     state.run.visualElapsedBeforePause = bounded; state.run.visualStartedAt = state.run.paused ? null : Date.now();
@@ -1861,8 +1889,8 @@ function seekRun(time) {
   persistRunProgress(state.run.paused?'paused':'active').catch(showPersistenceError);
 }
 function advanceRunPhase() {
-  const index = runPhaseIndex();
-  const next = runPhases[Math.min(runPhases.length - 1, index + 1)];
+  const phases=currentRunPhases();const index = runPhaseIndex();
+  const next = phases[Math.min(phases.length - 1, index + 1)];
   seekRun(next.start);
 }
 async function pauseRunAudio() {
@@ -1885,22 +1913,36 @@ async function resumeRunAudio() {
   renderRun(); updateAll();
 }
 async function finishRunSession(natural = false) {
-  if(state.run.completed||!state.run.id) return;
-  const position=natural?RUN_TOTAL_SECONDS:currentRunTime();
-  try{const record=await persistRunProgress('completed',{audioPositionSeconds:position,paused:false,completedAt:new Date().toISOString()});state.runHistory=upsertById(state.runHistory,record);}catch(error){return showPersistenceError(error);}
+  if(state.run.completed||!state.run.id||state.run.step==='result') return;
+  const template=currentRunTemplate();const position=natural?template.durationSeconds:Math.max(currentRunTime(),state.run.visualElapsedBeforePause||0);const completion=runCompletionAt(template,position);const completedAt=new Date().toISOString();
+  try{const record=await persistRunProgress('awaiting-result',{...completion,intendedStatus:completion.status,audioPositionSeconds:position,paused:false,completedAt});state.runHistory=upsertById(state.runHistory,record);state.run.completionDraft={...completion,audioPositionSeconds:position,completedAt};}catch(error){return showPersistenceError(error);}
   clearInterval(runUiTicker); runUiTicker = null;
   const audio = runAudioElement(); if (audio) { audio.pause(); if (!natural) audio.currentTime = 0; }
-  state.run.completed = true; state.run.active = false; state.run.paused = false; state.run.step = 'receipt';
+  state.run.active = false; state.run.paused = false; state.run.step = 'result';
   state.run.visualStartedAt = null; state.run.visualElapsedBeforePause = 0;
   releaseRunWakeLock();
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
   renderRun(); updateAll();
 }
 
+async function saveRunResult(){
+  if(!isRunEffortResult(state.run.effortResult)||!state.run.completionDraft)return showToast('Choose how the run felt before saving.');
+  try{
+    const result=await persistence.completeRunEvidence({id:state.run.id,status:state.run.completionDraft.status,effortResult:state.run.effortResult,discomfortFlag:state.run.discomfortFlag,...state.run.completionDraft},state.programme);
+    state.runHistory=upsertById(state.runHistory,result.session);state.runningProgression=result.progression;state.run.completed=true;state.run.resultSaved=true;state.run.step='receipt';
+    renderRun();updateAll();
+  }catch(error){showPersistenceError(error);}
+}
+
+async function handleRunProgressionDecision(decision){
+  const recommendation=state.runningProgression.pendingRecommendation;
+  try{const next=decideRunProgression(state.runningProgression,recommendation,decision);const saved=await persistence.saveRunningProgression(next);state.runningProgression=saved;renderRun();updateAll();showToast(decision==='progress'?'Next running stage accepted.':decision==='use-previous'?'Previous stage selected for the next run.':'Current running stage retained.');}catch(error){showPersistenceError(error);}
+}
+
 async function persistRunProgress(status,patch={}) {
   if(!state.run.id) return null;
   const now=new Date().toISOString();
-  return persistence.saveRun({id:state.run.id,status,audioPositionSeconds:currentRunTime(),currentPhaseIndex:runPhaseIndex(),paused:state.run.paused,guidanceMode:state.run.audioMode,lastPersistedAt:now,...patch});
+  return persistence.saveRun({id:state.run.id,status,runProgramVersion:state.runningProgression.runProgramVersion,runTemplateId:currentRunTemplate().id,runTemplateVersion:currentRunTemplate().version,stageId:currentRunTemplate().stageId,stageVersion:currentRunTemplate().stageVersion,audioPositionSeconds:currentRunTime(),currentPhaseIndex:runPhaseIndex(),paused:state.run.paused,guidanceMode:state.run.audioMode,lastPersistedAt:now,...patch});
 }
 async function testRunCoach() {
   if (state.run.audioMode === 'visual') return;
@@ -1945,15 +1987,21 @@ function runOfflineButtonLabel() {
   return 'Download for offline';
 }
 function renderRun() {
-  const stage = document.getElementById('runStage'); if (!stage) return;
+  const stage = document.getElementById('runStage'); if (!stage||!state.runningProgression) return;
+  const template=currentRunTemplate();const stageDomain=getRunStage(state.runningProgression.currentStageId);const phases=currentRunPhases();const total=template.durationSeconds;const pending=state.runningProgression.pendingRecommendation;const completedRuns=state.runHistory.filter(item=>item.status==='completed');const recent=state.runHistory.filter(item=>['completed','partial'].includes(item.status)).slice(-4).reverse();const milestone=nextRunMilestone(state.runHistory);const totalRunningSeconds=completedRuns.reduce((sum,item)=>sum+(item.completedRunSeconds||0),0);const longestContinuous=Math.max(0,...completedRuns.map(item=>item.templateSnapshot?.longestContinuousRunSeconds||0));const decisions=(state.runningProgression.decisions||[]).slice(-4).reverse();
+  const topbar=document.getElementById('runTopbarLabel');if(topbar)topbar.textContent=template.stageNumber?`RUN STAGE ${template.stageNumber}`:template.kind==='controlled-quality'?'OPTIONAL QUALITY RUN':'AEROBIC BASE';
   if (state.run.step === 'overview') {
-    stage.innerHTML = `<div class="run-hero"><span class="eyebrow light-eyebrow">Week 3 · coached aerobic foundation</span><h1>${starterRun.name}</h1><p>The session is driven by one continuous audio programme so phase instructions can keep playing through media controls when the screen is locked.</p><div class="run-overview"><div><span>Total time</span><strong>${formatTime(RUN_TOTAL_SECONDS)}</strong></div><div><span>Structure</span><strong>5-min warm-up · 6 rounds · 5-min cool-down</strong></div><div><span>Recommended</span><strong>Voice coach + earpiece</strong></div></div><section class="run-audio-setup"><div class="section-heading-row compact-row"><div><span class="eyebrow light-eyebrow">Audio guidance</span><h2>Choose how Proof coaches you.</h2></div><span class="status-pill ${state.run.audioTested ? 'success' : 'effort'}">${state.run.audioTested ? 'Audio tested' : 'Test before leaving'}</span></div><div class="run-audio-modes">${runModeCard('voice','Voice coach','Spoken phase changes, round numbers, ten-second warnings, pace cues, and cool-down instructions.','RECOMMENDED')}${runModeCard('chimes','Chimes only','Continuous media track with distinct run, walk, warning, and completion tones.','LESS TALK')}${runModeCard('visual','Visual only','No audio. Keep the screen awake and read each phase. Not suitable for a locked phone.','FALLBACK')}</div><div class="run-offline-row"><span class="status-pill ${state.run.offlineStatus === 'available' ? 'success' : state.run.offlineStatus === 'failed' ? 'danger' : 'effort'}">${runOfflineLabel()}</span><button class="workout-button" data-run-download ${state.run.offlineStatus === 'downloading' || state.run.offlineStatus === 'available' ? 'disabled' : ''}>${runOfflineButtonLabel()}</button></div>${state.run.audioError ? `<p class="run-audio-error" role="alert">${state.run.audioError}</p>` : ''}<div class="run-lockscreen-check"><div><strong>Before the first outdoor run</strong><p>Connect your earpiece, set a safe volume, tap Test coach, then briefly lock the phone. Confirm that you still hear the sample on your device.</p></div><button class="workout-button" data-run-test ${state.run.audioMode === 'visual' ? 'disabled' : ''}>Test coach</button><label><input type="checkbox" data-run-lock-confirm ${state.run.lockScreenConfirmed ? 'checked' : ''}> I heard the coach with my screen locked</label></div><label class="run-wake-option"><input type="checkbox" data-run-keep-awake ${state.run.keepAwake ? 'checked' : ''}> <span><strong>Keep screen awake as a fallback</strong><small>Only available in the installed HTTPS app while Proof remains visible.</small></span></label></section><div class="run-cue-card"><strong>Earphone and road awareness</strong><p>Keep the volume low enough to hear your surroundings. Around traffic, use transparency/ambient mode or leave one ear open. The coach never tells you to cross a road or ignore the environment.</p></div><div class="run-phase-preview">${runPhases.filter((p,i)=>i===0||p.id==='run-round-1'||p.id==='walk-round-1'||p.id==='cooldown').map(p=>`<div><span>${p.label}</span><strong>${Math.round((p.end-p.start)/60)} min${p.id==='run-round-1'?' × 6':''}</strong><p>${p.cue}</p></div>`).join('')}</div><div class="workout-button-row"><button class="workout-button primary" data-run-start ${state.run.audioMode !== 'visual' && !state.run.audioTested ? 'disabled title="Test the coach first"' : ''}>Start coached run</button><button class="workout-button" data-action="minimise-run">Back to Plan</button></div></div>`;
+    const recommendation=currentTodayRunRecommendation();const qualityRecommendation=currentTodayRunRecommendation(true);const next=nextRunStage(stageDomain.id);
+    stage.innerHTML = `<div class="run-hero running-domain-page"><span class="eyebrow light-eyebrow">Current running level</span><h1>${template.stageNumber?`Stage ${template.stageNumber} · `:''}${template.name}</h1><p>${recommendation.reason}</p><div class="run-overview"><div><span>Next session</span><strong>${formatTime(total)} · ${runStructure(template)}</strong></div><div><span>Progress</span><strong>${state.runningProgression.qualifyingCompletionsAtCurrentStage} of ${stageDomain.requiredQualifyingCompletions} qualifying runs</strong></div><div><span>Next milestone</span><strong>${milestone?.label||'Aerobic base established'}</strong></div></div><div class="run-metric-strip"><div><span>Runs completed</span><strong>${completedRuns.length}</strong></div><div><span>Total running</span><strong>${formatTime(totalRunningSeconds)}</strong></div><div><span>Longest continuous</span><strong>${formatTime(longestContinuous)}</strong></div><div><span>Hybrid</span><strong>${state.runningProgression.qualitySessionUnlocked?'Available':state.runningProgression.aerobicBaseStatus==='established'?'Building':'Foundation'}</strong></div></div>${pending?.eligible?`<section class="progression-recommendation"><span class="eyebrow">${pending.type==='regress'?'Run adjustment':'Run progression available'}</span><h2>${pending.type==='regress'?`Consider ${getRunTemplate(pending.toStageId).name}`:`${template.name} → ${getRunTemplate(pending.toStageId).name}`}</h2><p>${pending.reason}</p><div class="recommendation-actions">${pending.type==='progress'?'<button class="button button-primary" data-run-decision="progress">Progress next run</button>':'<button class="button button-primary" data-run-decision="use-previous">Use previous stage next run</button>'}<button class="button button-secondary" data-run-decision="repeat">Repeat current stage</button></div></section>`:`<section class="run-cue-card"><strong>${next?`Next: ${next.name}`:'Sustainable aerobic range'}</strong><p>Longer comfortable running comes before faster running. Stage changes always require your decision.</p></section>`}${state.runningProgression.qualitySessionUnlocked?`<section class="quality-run-card"><span class="eyebrow">Hybrid capability · building</span><h2>Optional controlled quality run</h2><p>Six one-minute controlled faster intervals with very easy recoveries. Never all-out, never required, and never a replacement for the primary easy run.</p>${state.runningProgression.qualitySessionOptIn?`<p>${qualityRecommendation.reason}</p><button class="button button-secondary" data-run-quality-start ${!qualityRecommendation.qualitySuitable||(state.run.audioMode !== 'visual'&&!state.run.audioTested)?'disabled':''}>${qualityRecommendation.qualitySuitable?'Start optional quality run':'Quality deferred today · choose easy'}</button>`:'<button class="button button-secondary" data-quality-opt-in>Enable as an option</button>'}</section>`:''}<section class="run-audio-setup"><div class="section-heading-row compact-row"><div><span class="eyebrow light-eyebrow">Audio guidance</span><h2>Choose how Proof coaches you.</h2></div><span class="status-pill ${state.run.audioTested ? 'success' : 'effort'}">${state.run.audioTested ? 'Audio tested' : 'Test before leaving'}</span></div><div class="run-audio-modes">${runModeCard('voice','Voice coach','Continuous spoken phase cues and ten-second warnings.','RECOMMENDED')}${runModeCard('chimes','Chimes only','Continuous track with phase and warning tones.','LESS TALK')}${runModeCard('visual','Visual only','No audio; keep Proof visible.','FALLBACK')}</div><div class="run-offline-row"><span class="status-pill ${state.run.offlineStatus === 'available' ? 'success' : state.run.offlineStatus === 'failed' ? 'danger' : 'effort'}">${runOfflineLabel()}</span><button class="workout-button" data-run-download ${state.run.offlineStatus === 'downloading' || state.run.offlineStatus === 'available' ? 'disabled' : ''}>${runOfflineButtonLabel()}</button></div>${state.run.audioError ? `<p class="run-audio-error" role="alert">${state.run.audioError}</p>` : ''}<div class="run-lockscreen-check"><div><strong>Before an outdoor run</strong><p>Use a safe volume and confirm your chosen guidance works on this device. Lock-screen behavior varies by browser.</p></div><button class="workout-button" data-run-test ${state.run.audioMode === 'visual' ? 'disabled' : ''}>Test coach</button><label><input type="checkbox" data-run-lock-confirm ${state.run.lockScreenConfirmed ? 'checked' : ''}> I heard the coach with my screen locked</label></div><label class="run-wake-option"><input type="checkbox" data-run-keep-awake ${state.run.keepAwake ? 'checked' : ''}> <span><strong>Keep screen awake as a fallback</strong><small>Proof must remain visible.</small></span></label></section><div class="run-phase-preview">${phases.filter((p,i)=>i===0||i===1||i===2||p.id==='cooldown').map(p=>`<div><span>${p.label}</span><strong>${formatTime(p.durationSeconds)}${p.round===1&&template.rounds>1?` × ${template.rounds}`:''}</strong><p>${p.cue}</p></div>`).join('')}</div>${recent.length?`<section class="running-history-compact"><span class="eyebrow">Recent runs</span>${recent.map(item=>{const historicalTemplate=safeRunTemplate(item);return `<div><time>${item.localDate}</time><strong>${historicalTemplate?.name||'Historical run · template unknown'}</strong><span>${formatTime(item.completedDurationSeconds||0)} · ${item.status} · ${item.effortResult?.replaceAll('-',' ')||'effort not recorded'} · ${formatTime(item.completedRunSeconds||0)} running / ${formatTime(item.completedWalkSeconds||0)} walking</span></div>`;}).join('')}</section>`:''}${decisions.length?`<section class="running-history-compact"><span class="eyebrow">Running progression history</span>${decisions.map(item=>`<div><time>${String(item.decidedAt).slice(0,10)}</time><strong>${getRunTemplate(item.fromStageId).name} ${item.toStageId!==item.fromStageId?`→ ${getRunTemplate(item.toStageId).name}`:'· repeated'}</strong><span>${item.decision.replaceAll('-',' ')}${item.recommendationId?' · evidence-backed recommendation':''}</span></div>`).join('')}</section>`:''}<div class="workout-button-row"><button class="workout-button primary" data-run-start ${state.run.audioMode !== 'visual' && !state.run.audioTested?'disabled':''}>${recommendation.recommendedActivity==='brisk-walk-or-mobility'?'Start run anyway':'Start run'}</button><button class="workout-button" data-action="minimise-run">Back to Plan</button></div></div>`;
+    if(state.runningProgression.aerobicBaseStatus==='established')stage.querySelector('.run-metric-strip')?.insertAdjacentHTML('afterend','<section class="quality-run-card"><span class="eyebrow">Aerobic base established</span><h2>30 minutes continuous achieved.</h2><p>You can now run continuously for 30 minutes. Proof will continue building easy aerobic capacity before optional faster conditioning.</p></section>');
   } else if (state.run.step === 'active') {
-    const time = currentRunTime(); const phase = currentRunPhase(time); const index = runPhaseIndex(time);
-    const remaining = Math.max(0, Math.ceil(phase.end - time)); const roundsDone = runPhases.filter((p,i)=>i<index && p.mode==='run').length;
-    stage.innerHTML = `<div class="run-live"><div class="run-live-meta"><span class="run-phase ${phase.mode}">${phase.label}</span><span>${state.run.audioMode === 'voice' ? 'VOICE COACH' : state.run.audioMode === 'chimes' ? 'CHIMES ONLY' : 'VISUAL ONLY'}</span></div><div class="run-clock">${formatTime(remaining)}</div><p class="run-interval-count">${phase.round ? `Round ${phase.round} of 6` : phase.instruction}</p><div class="run-timeline">${Array.from({length:6},(_,i)=>`<span class="${i < roundsDone ? 'done' : phase.round===i+1 ? 'current' : ''}"></span>`).join('')}</div><div class="run-cue-card"><strong>${phase.instruction}</strong><p>${phase.cue}</p></div><div class="run-media-status"><span>${state.run.paused ? 'PAUSED' : 'PLAYING'}</span><strong>${formatTime(Math.floor(time))} / ${formatTime(RUN_TOTAL_SECONDS)}</strong><small>${state.run.audioMode === 'visual' ? 'Keep Proof visible.' : 'Use your lock-screen or earpiece media controls to pause and resume where supported.'}</small></div><div class="workout-button-row"><button class="workout-button" data-run-toggle>${state.run.paused ? 'Resume' : 'Pause'}</button><button class="workout-button" data-run-switch>Skip to next phase</button><button class="workout-button primary" data-run-finish>Finish run</button></div></div>`;
+    const time = currentRunTime(); const phase = currentRunPhase(time); const index = runPhaseIndex(time);const remaining = Math.max(0, Math.ceil(phase.end - time)); const roundsDone = phases.filter((p,i)=>i<index && p.mode==='run').length;const nextPhase=phases[index+1];
+    stage.innerHTML = `<div class="run-live"><div class="run-live-meta"><span class="run-phase ${phase.mode}">${phase.label}</span><span>${state.run.audioMode === 'voice' ? 'VOICE COACH' : state.run.audioMode === 'chimes' ? 'CHIMES ONLY' : 'VISUAL ONLY'}</span></div><div class="run-clock">${formatTime(remaining)}</div><p class="run-interval-count">${phase.round ? `${['easy-run','controlled-run'].includes(phase.type)?'Run':'Recovery'} ${phase.round} of ${template.rounds}` : phase.instruction}</p><div class="run-timeline">${Array.from({length:template.rounds},(_,i)=>`<span class="${i < roundsDone ? 'done' : phase.round===i+1 ? 'current' : ''}"></span>`).join('')}</div><div class="run-cue-card"><strong>${remaining<=10?phase.warning:phase.instruction}</strong><p>${remaining<=10?'The continuous guidance track is giving the ten-second transition warning now.':phase.cue}</p>${nextPhase?`<small>NEXT · ${formatTime(nextPhase.durationSeconds)} ${nextPhase.label.toLowerCase()}</small>`:''}</div><div class="run-media-status"><span>${state.run.paused ? 'PAUSED' : 'PLAYING'}</span><strong>${formatTime(Math.floor(time))} / ${formatTime(total)}</strong><small>${state.run.audioMode === 'visual' ? 'Keep Proof visible.' : 'Media controls can pause and resume where supported.'}</small></div><div class="workout-button-row"><button class="workout-button" data-run-toggle>${state.run.paused ? 'Resume' : 'Pause'}</button><button class="workout-button" data-run-switch>Skip to next phase</button><button class="workout-button primary" data-run-finish>End session</button></div></div>`;
+  } else if(state.run.step==='result'){
+    stage.innerHTML=`<div class="run-receipt run-result"><span class="eyebrow">Run result</span><h2>How did the run feel?</h2><p>${state.run.completionDraft?.status==='partial'?'This partial session is preserved and will not count toward progression.':'Record the effort before Proof evaluates progression.'}</p><div class="choice-list" role="group" aria-label="Run effort result">${renderChoice({family:'run-effort',attributes:'data-run-effort="comfortable"',label:'Comfortable',description:'Finished with control and could likely have continued a little longer.',selected:state.run.effortResult==='comfortable'})}${renderChoice({family:'run-effort',attributes:'data-run-effort="challenging-controlled"',label:'Challenging but controlled',description:'Required effort, but the session stayed controlled.',selected:state.run.effortResult==='challenging-controlled'})}${renderChoice({family:'run-effort',attributes:'data-run-effort="too-hard"',label:'Too hard',description:'Difficult to sustain or the running blocks could not be completed comfortably.',selected:state.run.effortResult==='too-hard'})}</div><label class="discomfort-check"><input type="checkbox" data-run-discomfort ${state.run.discomfortFlag?'checked':''}> Concerning pain or discomfort</label><p class="run-safety-copy">Do not push through sharp or concerning pain. Proof does not diagnose injuries.</p><button class="button button-primary full-width" data-run-save-result ${state.run.effortResult?'':'disabled'}>Save run result</button></div>`;
   } else {
-    stage.innerHTML = `<div class="run-receipt"><span class="eyebrow">Run receipt</span><h2>Easy work, completed.</h2><p>${starterRun.name} · audio-guided phases · strength schedule preserved.</p><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Planned</span><strong>${formatTime(RUN_TOTAL_SECONDS)}</strong></div><div><span>Run rounds</span><strong>6</strong></div><div><span>Run type</span><strong>Conversational</strong></div><div><span>Guidance</span><strong>${state.run.audioMode === 'voice' ? 'Voice coach' : state.run.audioMode === 'chimes' ? 'Chimes only' : 'Visual'}</strong></div></div><div class="receipt-dash"></div><button class="button button-primary full-width" data-run-done>Return to Plan</button></div>`;
+    const record=state.runHistory.find(item=>item.id===state.run.id);const recommendation=state.runningProgression.pendingRecommendation;
+    stage.innerHTML = `<div class="run-receipt"><span class="eyebrow">Run receipt</span><h2>${record?.status==='partial'?'Partial run saved.':'Easy work, recorded.'}</h2><p>${template.name} · ${record?.effortResult?.replaceAll('-',' ')||'effort not recorded'} · strength schedule preserved.</p><div class="receipt-dash"></div><div class="receipt-stats"><div><span>Completed</span><strong>${formatTime(record?.completedDurationSeconds||0)}</strong></div><div><span>Running time</span><strong>${formatTime(record?.completedRunSeconds||0)}</strong></div><div><span>Stage evidence</span><strong>${state.runningProgression.qualifyingCompletionsAtCurrentStage} / 2</strong></div><div><span>Guidance</span><strong>${state.run.audioMode === 'voice' ? 'Voice coach' : state.run.audioMode === 'chimes' ? 'Chimes only' : 'Visual'}</strong></div></div>${recommendation?.eligible?`<section class="progression-recommendation compact"><span class="eyebrow">${recommendation.type==='regress'?'Run adjustment':'Run progression available'}</span><h3>${getRunTemplate(recommendation.toStageId).name}</h3><p>${recommendation.reason}</p><div class="recommendation-actions">${recommendation.type==='progress'?'<button class="button button-primary" data-run-decision="progress">Progress next run</button>':'<button class="button button-primary" data-run-decision="use-previous">Use previous stage</button>'}<button class="button button-secondary" data-run-decision="repeat">Repeat current stage</button></div></section>`:''}${state.runningProgression.qualitySessionUnlocked&&!state.runningProgression.qualitySessionOptIn?'<button class="button button-secondary full-width" data-quality-opt-in>Enable optional controlled quality run</button>':''}<div class="receipt-dash"></div><button class="button button-primary full-width" data-run-done>Return to Running</button></div>`;
   }
   bindRunActions(); updateRunClockDisplayOnly();
 }
@@ -1972,10 +2020,16 @@ function bindRunActions() {
   document.querySelectorAll('[data-run-lock-confirm]').forEach(input => input.addEventListener('change', () => { state.run.lockScreenConfirmed = input.checked; renderRun(); }));
   document.querySelectorAll('[data-run-keep-awake]').forEach(input => input.addEventListener('change', () => { state.run.keepAwake = input.checked; renderRun(); }));
   document.querySelectorAll('[data-run-start]').forEach(b => b.addEventListener('click', () => { if (!b.disabled) startRunSession(); }));
+  document.querySelectorAll('[data-run-quality-start]').forEach(b=>b.addEventListener('click',()=>{if(!b.disabled)startRunSession('controlled-intervals-01');}));
   document.querySelectorAll('[data-run-toggle]').forEach(b => b.addEventListener('click', () => state.run.paused ? resumeRunAudio() : pauseRunAudio()));
   document.querySelectorAll('[data-run-switch]').forEach(b => b.addEventListener('click', advanceRunPhase));
   document.querySelectorAll('[data-run-finish]').forEach(b => b.addEventListener('click', () => finishRunSession(false)));
-  document.querySelectorAll('[data-run-done]').forEach(b => b.addEventListener('click', () => { state.run.id = null; state.run.step = 'overview'; state.run.completed = false; showScreen('plan'); updateAll(); }));
+  document.querySelectorAll('[data-run-effort]').forEach(b=>b.addEventListener('click',()=>{state.run.effortResult=b.dataset.runEffort;renderRun();}));
+  document.querySelectorAll('[data-run-discomfort]').forEach(input=>input.addEventListener('change',()=>{state.run.discomfortFlag=input.checked;}));
+  document.querySelectorAll('[data-run-save-result]').forEach(b=>b.addEventListener('click',saveRunResult));
+  document.querySelectorAll('[data-run-decision]').forEach(b=>b.addEventListener('click',()=>handleRunProgressionDecision(b.dataset.runDecision)));
+  document.querySelectorAll('[data-quality-opt-in]').forEach(b=>b.addEventListener('click',async()=>{try{const saved=await persistence.saveRunningProgression(setQualityRunOptIn(state.runningProgression,true));state.runningProgression=saved;renderRun();updateAll();}catch(error){showPersistenceError(error);}}));
+  document.querySelectorAll('[data-run-done]').forEach(b => b.addEventListener('click', () => { state.run.id = null; state.run.templateId=state.runningProgression.currentStageId;state.run.step = 'overview'; state.run.completed = false; renderRun();updateAll(); }));
   document.querySelectorAll('[data-action="minimise-run"]').forEach(b => b.addEventListener('click', minimiseRun));
   document.querySelectorAll('[data-action="end-run"]').forEach(b => b.addEventListener('click', () => finishRunSession(false)));
 }
@@ -1993,7 +2047,7 @@ function updateActiveRunStrip() {
   }
   const visible = state.run.active && !state.run.completed && state.screen !== 'run'; strip?.classList.toggle('hidden', !visible);
   const phase = currentRunPhase(); const text = document.getElementById('activeRunText');
-  if (text) text.textContent = `${state.run.paused ? 'Paused' : phase.label} · ${formatTime(Math.max(0, Math.ceil(phase.end-currentRunTime())))}${phase.round ? ` · round ${phase.round}/6` : ''}`;
+  if (text) text.textContent = `${state.run.paused ? 'Paused' : phase.label} · ${formatTime(Math.max(0, Math.ceil(phase.end-currentRunTime())))}${phase.round ? ` · round ${phase.round}/${currentRunTemplate().rounds}` : ''}`;
 }
 
 function bindRunAudioEvents() {
@@ -2003,20 +2057,22 @@ function bindRunAudioEvents() {
   audio.addEventListener('ended', () => finishRunSession(true));
   audio.addEventListener('timeupdate', updateRunUi);
   audio.addEventListener('loadedmetadata', () => {
+    const expectedDuration=currentRunTemplate().durationSeconds;
     if (state.run.paused && state.run.visualElapsedBeforePause > 0 && audio.currentTime === 0) {
-      audio.currentTime = Math.min(state.run.visualElapsedBeforePause, RUN_TOTAL_SECONDS);
+      audio.currentTime = Math.min(state.run.visualElapsedBeforePause, expectedDuration);
     }
-    if (Number.isFinite(audio.duration) && Math.abs(audio.duration - RUN_TOTAL_SECONDS) > 0.25) {
+    if (Number.isFinite(audio.duration) && Math.abs(audio.duration - expectedDuration) > 0.25) {
       state.run.audioError = `Coach audio has an unexpected duration (${audio.duration.toFixed(1)} seconds).`;
       if (state.run.step === 'overview') renderRun();
     }
   });
   audio.addEventListener('error', async () => {
     const failedSource = audio.currentSrc || audio.src;
-    if (state.run.audioMode === 'voice' && failedSource.endsWith('.opus')) {
+    const mp3=currentRunTemplate().audio.mp3;
+    if (state.run.audioMode === 'voice' && failedSource.endsWith('.opus') && mp3) {
       const shouldResume = state.run.active && !state.run.paused;
       state.run.audioFormat = 'mp3';
-      audio.src = RUN_AUDIO.mp3;
+      audio.src = mp3;
       audio.load();
       if (shouldResume) {
         try { await audio.play(); return; } catch (_) {}
@@ -2079,9 +2135,10 @@ function hydrateOnboardingDraft(draft) {
 }
 
 function showRunRecovery() {
+  if(state.run.step==='result'){renderRun();showScreen('run');return;}
   openModal(`<div class="modal-heading"><div><span class="eyebrow">Saved run</span><h2 id="modalTitle">Resume your coached run?</h2></div><button class="modal-close" data-action="close-modal">×</button></div><p>The last saved audio position is ${formatTime(Math.floor(state.run.visualElapsedBeforePause||0))}. It may be a few seconds behind the exact interruption point.</p><div class="modal-actions"><button class="button button-secondary" id="endRecoveredRun">End run</button><button class="button button-primary" id="resumeRecoveredRun">Open run</button></div>`);
   document.getElementById('resumeRecoveredRun').addEventListener('click',()=>{closeModal();prepareRunAudio();const audio=runAudioElement();if(audio&&state.run.audioMode!=='visual')audio.currentTime=state.run.visualElapsedBeforePause||0;renderRun();showScreen('run');});
-  document.getElementById('endRecoveredRun').addEventListener('click',async()=>{await finishRunSession(false);closeModal();showScreen('plan');});
+  document.getElementById('endRecoveredRun').addEventListener('click',async()=>{await finishRunSession(false);closeModal();renderRun();showScreen('run');});
 }
 
 function renderPersistenceFailure(result) {

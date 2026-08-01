@@ -9,8 +9,9 @@ import { getWorkoutTemplate } from '../src/domain/programmes/programmeCatalog.js
 import { DEFAULT_EQUIPMENT } from '../src/domain/equipment/equipmentCatalog.js';
 import { nextRequiredWorkout } from '../src/domain/scheduling/workoutRotation.js';
 import { localDate } from '../src/db/transactions.js';
+import { createRunSessionSnapshot } from '../src/domain/running/runEvidence.js';
 import Dexie from 'dexie';
-import {SCHEMA_V1,SCHEMA_V2} from '../src/db/schema.js';
+import {SCHEMA_V1,SCHEMA_V2,SCHEMA_V3} from '../src/db/schema.js';
 
 function fixtureName(label) { return `proof-fitness-test-${label}-${crypto.randomUUID()}`; }
 async function context(t,label) {
@@ -30,6 +31,8 @@ test('clean install creates schema metadata and no activity',async t=>{
   for(const collection of ['workouts','runs','mealChecks','checkIns','measurements','progression','reviews','transitions']) assert.deepEqual(state[collection],[]);
   assert.ok(state.appMeta.completedMigrations.includes(1));
   assert.ok(state.appMeta.completedMigrations.includes(3));
+  assert.ok(state.appMeta.completedMigrations.includes(4));
+  assert.equal(state.runningProgression.currentStageId,'run-walk-stage-01');
 });
 
 test('partial onboarding and completed onboarding survive recreation',async t=>{
@@ -106,6 +109,15 @@ test('meals, check-ins, measurements, progression, reviews, transitions, equipme
   assert.equal(state.progression[0].exerciseId,'barbell-curl'); assert.equal(state.reviews[0].recommendation,'ready');
   assert.ok(state.transitions.some(item=>item.id==='transition-1')); assert.equal(state.equipment.pullUpSafetyConfirmation.confirmed,true);
   assert.equal(state.runs[0].audioPositionSeconds,418); assert.equal(state.runs[0].guidanceMode,'chimes');
+});
+
+test('run evidence finalization is atomic and idempotent',async t=>{
+  const {db,persistence}=await context(t,'run-finalization');const programme=await persistence.completeOnboarding(onboardingInput());const progression=(await hydrateState(db)).runningProgression;const startedAt='2026-07-31T10:00:00.000Z';
+  const snapshot=createRunSessionSnapshot({id:'atomic-run',templateId:'run-walk-stage-01',startedAt,guidanceMode:'visual',progressionState:progression,readinessRecommendation:{progressionSuitable:true,qualitySuitable:true}});
+  await persistence.saveRun({...snapshot,status:'awaiting-result',audioPositionSeconds:1680,completedDurationSeconds:1680,completedRunSeconds:360,completedWalkSeconds:1320,completedPhases:snapshot.templateSnapshot.phases.map(item=>item.id),completedAt:'2026-07-31T10:28:00.000Z'});
+  const patch={id:'atomic-run',status:'completed',effortResult:'comfortable',discomfortFlag:false,completedDurationSeconds:1680,completedRunSeconds:360,completedWalkSeconds:1320};
+  const first=await persistence.completeRunEvidence(patch,programme);const second=await persistence.completeRunEvidence(patch,programme);
+  assert.equal(first.session.evidenceFinalizedAt,second.session.evidenceFinalizedAt);assert.equal(second.progression.qualifyingCompletionsAtCurrentStage,1);assert.deepEqual(second.progression.qualifyingSessionIds,['atomic-run']);assert.equal(await db.runSessions.count(),1);assert.equal(await db.auditEvents.filter(item=>item.entityId==='atomic-run').count(),1);
 });
 
 test('accepted, deferred, and rejected recommendations persist without cross-exercise duplication',async t=>{
@@ -187,10 +199,10 @@ test('version 1 migration preserves records and conservatively migrates known le
   await legacy.table('exerciseProgressionStates').put({id:'barbell-curl@1',exerciseId:'barbell-curl',exerciseVersion:1,currentWorkingLoad:10,updatedAt:'2026-07-01T00:00:00.000Z'});
   legacy.close(); const upgraded=new ProofFitnessDatabase(name); t.after(async()=>{upgraded.close();await upgraded.delete();});
   const state=await hydrateState(await openDatabase(upgraded));
-  assert.equal(upgraded.verno,3); assert.deepEqual(state.equipment.barbell.weight,{weightKg:null,weightSource:'unknown'});
+  assert.equal(upgraded.verno,4); assert.deepEqual(state.equipment.barbell.weight,{weightKg:null,weightSource:'unknown'});
   assert.deepEqual(state.equipment.dumbbellHandle.weight,{weightKgEach:1.2,weightSource:'estimated'});
   assert.deepEqual(state.equipment.collars,{count:6,weight:{weightKgEach:null,weightSource:'unknown'}});
-  assert.equal(state.progression[0].currentWorkingLoad.plateLoadKg,10); assert.ok(state.appMeta.completedMigrations.includes(2)); assert.ok(state.appMeta.completedMigrations.includes(3));
+  assert.equal(state.progression[0].currentWorkingLoad.plateLoadKg,10); assert.ok(state.appMeta.completedMigrations.includes(2)); assert.ok(state.appMeta.completedMigrations.includes(3));assert.ok(state.appMeta.completedMigrations.includes(4));
 });
 
 test('version 2 migration adds collar provenance without resetting equipment or historical snapshots',async t=>{
@@ -202,10 +214,23 @@ test('version 2 migration adds collar provenance without resetting equipment or 
   await legacy.table('workoutSessions').put({id:'historical-v2',templateId:'foundation-a',status:'completed',localDate:'2026-07-01',workoutSnapshot:{exercises:[{exerciseId:'barbell-romanian-deadlift',loadingGuidanceSnapshot:historicalGuidance}]},updatedAt:'2026-07-01T00:00:00.000Z'});
   legacy.close(); const upgraded=new ProofFitnessDatabase(name); t.after(async()=>{upgraded.close();await upgraded.delete();});
   const state=await hydrateState(await openDatabase(upgraded));
-  assert.equal(upgraded.verno,3);
+  assert.equal(upgraded.verno,4);
   assert.deepEqual(state.equipment.barbell.weight,{weightKg:5.8,weightSource:'estimated'});
   assert.deepEqual(state.equipment.dumbbellHandle.weight,{weightKgEach:null,weightSource:'unknown'});
   assert.deepEqual(state.equipment.collars,{count:6,weight:{weightKgEach:null,weightSource:'unknown'}});
   assert.equal(state.workouts[0].workoutSnapshot.exercises[0].loadingGuidanceSnapshot.totalSystemLoadKg,20.8);
   assert.equal(state.workouts[0].workoutSnapshot.exercises[0].loadingGuidanceSnapshot.collarWeightKgEach,undefined);
+});
+
+test('version 3 migration maps unambiguous starter runs and preserves history',async t=>{
+  const name=fixtureName('migration-v3-running');const legacy=new Dexie(name);legacy.version(3).stores(SCHEMA_V3);await legacy.open();
+  await legacy.table('appMeta').put({id:'app',completedMigrations:[1,2,3],onboardingCompletedAt:null,updatedAt:'2026-07-01T00:00:00.000Z'});
+  await legacy.table('runSessions').put({id:'legacy-run',runTemplateId:'starter-run',status:'completed',audioPositionSeconds:1680,localDate:'2026-07-01',updatedAt:'2026-07-01T01:00:00.000Z'});legacy.close();
+  const upgraded=new ProofFitnessDatabase(name);t.after(async()=>{upgraded.close();await upgraded.delete();});const state=await hydrateState(await openDatabase(upgraded));
+  assert.equal(upgraded.verno,4);assert.equal(state.runs[0].runTemplateId,'run-walk-stage-01');assert.equal(state.runs[0].legacyRunTemplateId,'starter-run');assert.equal(state.runs[0].effortResult,null);assert.equal(state.runs[0].completedRunSeconds,360);assert.equal(state.runningProgression.currentStageId,'run-walk-stage-01');
+});
+
+test('version 3 migration marks ambiguous run history unknown instead of fabricating Stage 1 evidence',async t=>{
+  const name=fixtureName('migration-v3-ambiguous-run');const legacy=new Dexie(name);legacy.version(3).stores(SCHEMA_V3);await legacy.open();await legacy.table('appMeta').put({id:'app',completedMigrations:[1,2,3],onboardingCompletedAt:null,updatedAt:'2026-07-01T00:00:00.000Z'});await legacy.table('runSessions').put({id:'ambiguous-run',status:'partial',audioPositionSeconds:300,localDate:'2026-07-01',updatedAt:'2026-07-01T01:00:00.000Z'});legacy.close();
+  const upgraded=new ProofFitnessDatabase(name);t.after(async()=>{upgraded.close();await upgraded.delete();});const state=await hydrateState(await openDatabase(upgraded));assert.equal(state.runs[0].migrationStatus,'unknown-legacy-run-template');assert.equal(state.runs[0].runTemplateId,null);assert.equal(state.runs[0].stageId,null);assert.equal(state.runningProgression.qualifyingCompletionsAtCurrentStage,0);
 });

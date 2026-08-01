@@ -51,7 +51,7 @@ export async function readStore(page, storeName) {
 export async function storeCounts(page) {
   const stores = [
     'workoutSessions', 'runSessions', 'mealChecks', 'dailyCheckIns',
-    'measurements', 'exerciseProgressionStates', 'programmeReviews'
+    'measurements', 'exerciseProgressionStates', 'programmeReviews', 'runProgressionStates'
   ];
   return Object.fromEntries(await Promise.all(stores.map(async name => [name, (await readStore(page, name)).length])));
 }

@@ -18,12 +18,14 @@
     "test:integration": "npm run build && playwright test",
     "test:integration:headed": "npm run build && playwright test --headed",
     "programme:validate": "node scripts/validate-programme-domain.mjs",
+    "running:validate": "node scripts/validate-running-domain.mjs",
     "audit:bundle": "node scripts/inspect-production-bundle.mjs",
-    "check": "node --check src/app.js && node --check public/sw.js && node scripts/verify-project.mjs && npm run programme:validate && npm test",
+    "check": "node --check src/app.js && node --check public/sw.js && node scripts/verify-project.mjs && npm run programme:validate && npm run running:validate && npm test",
     "audio:setup": "python3 -m venv scripts/audio/.venv && scripts/audio/.venv/bin/python -m pip install --upgrade pip && scripts/audio/.venv/bin/pip install -r scripts/audio/requirements.txt",
     "audio:samples": "scripts/audio/.venv/bin/python scripts/audio/generate_samples.py",
     "audio:generate": "scripts/audio/.venv/bin/python scripts/audio/generate_phrases.py && scripts/audio/.venv/bin/python scripts/audio/assemble_session.py",
-    "audio:verify": "scripts/audio/.venv/bin/python scripts/audio/verify_audio.py"
+    "audio:verify": "scripts/audio/.venv/bin/python scripts/audio/verify_audio.py",
+    "audio:generate-running": "node scripts/sync-run-script.mjs && scripts/audio/.venv/bin/python scripts/audio/generate_running_phrases.py && scripts/audio/.venv/bin/python scripts/audio/assemble_running_program.py"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

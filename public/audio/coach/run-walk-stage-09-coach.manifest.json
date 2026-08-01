@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "run-walk-stage-09",
+  "sessionVersion": 1,
+  "durationSeconds": 2100,
+  "voiceEngine": "kokoro",
+  "voice": "bf_emma",
+  "language": "b",
+  "speed": 0.95,
+  "kokoroVersion": "0.9.4",
+  "generatedAt": "2026-08-01T19:42:03Z",
+  "mastering": {
+    "integratedLufs": -16,
+    "truePeakDb": -1.5,
+    "sampleRate": 24000,
+    "opusBitrate": "32k"
+  },
+  "files": {
+    "opus": {
+      "path": "/audio/coach/run-walk-stage-09-coach.opus",
+      "sha256": "6786b3eecf819d8fb7f786ce309496936f8b5235cfc77496769e39631e464039"
+    },
+    "chimes": {
+      "path": "/audio/chimes/run-walk-stage-09-chimes.opus",
+      "sha256": "24880d7b4d64011883c67af6ce847af1b4b4b5e3ab3963c0677a7607725224f6"
+    }
+  },
+  "cues": [
+    {
+      "id": "warmup",
+      "timeSeconds": 0,
+      "phase": "warm-up-walk",
+      "kind": "start"
+    },
+    {
+      "id": "warmup-warning",
+      "timeSeconds": 290,
+      "phase": "warm-up-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "continuous-run",
+      "timeSeconds": 300,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "continuous-run-warning",
+      "timeSeconds": 1790,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "cooldown",
+      "timeSeconds": 1800,
+      "phase": "cool-down-walk",
+      "kind": "start"
+    },
+    {
+      "id": "cooldown-warning",
+      "timeSeconds": 2090,
+      "phase": "cool-down-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "session-complete",
+      "timeSeconds": 2100,
+      "phase": "complete",
+      "kind": "completion"
+    }
+  ]
+}

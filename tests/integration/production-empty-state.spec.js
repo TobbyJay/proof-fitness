@@ -66,8 +66,8 @@ for (const viewport of [
     await page.getByRole('button',{name:'Back to Today'}).click();
     await page.getByRole('button',{name:'Plan'}).first().click();
     await page.getByRole('button',{name:'Week'}).click();
-    await page.getByRole('button',{name:'Open starter run'}).click();
-    await expect(page.getByRole('button',{name:'Start coached run'})).toBeVisible();
+    await page.getByRole('button',{name:'Open running'}).click();
+    await expect(page.getByRole('button',{name:'Start run'})).toBeVisible();
     await assertNoOverflow();
   });
 }

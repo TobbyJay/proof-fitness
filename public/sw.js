@@ -1,4 +1,4 @@
-const CACHE_NAME = 'proof-fitness-v1.1.0';
+const CACHE_NAME = 'proof-fitness-v1.2.0';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -6,13 +6,10 @@ const APP_SHELL = [
   '/audio/coach/starter-run-coach.manifest.json',
   '/audio-scripts/starter-run.json'
 ];
-const RUN_AUDIO_RESOURCES = new Set([
-  '/audio/coach/starter-run-coach.opus',
-  '/audio/coach/starter-run-coach.mp3',
-  '/audio/chimes/starter-run-chimes.opus',
-  '/audio/coach/starter-run-coach.manifest.json',
-  '/audio-scripts/starter-run.json'
-]);
+const RUN_RESOURCE_PREFIXES = ['/audio/coach/','/audio/chimes/','/audio-scripts/'];
+function isAllowedRunResource(resource) {
+  return typeof resource === 'string' && !resource.includes('..') && RUN_RESOURCE_PREFIXES.some(prefix => resource.startsWith(prefix));
+}
 
 async function mediaResponse(request, cached) {
   const range = request.headers.get('range');
@@ -66,7 +63,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type !== 'CACHE_RUN_AUDIO') return;
   const requested = Array.isArray(event.data.resources) ? event.data.resources : [];
-  const resources = requested.filter((resource) => RUN_AUDIO_RESOURCES.has(resource));
+  const resources = requested.filter(isAllowedRunResource);
   event.waitUntil((async () => {
     let ok = false;
     try {

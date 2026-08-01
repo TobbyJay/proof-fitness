@@ -1,5 +1,7 @@
 import { RECORD_SCHEMA_VERSION } from './schema.js';
 import { normaliseEquipment } from '../domain/equipment/equipmentCatalog.js';
+import { createRunProgressionState, PRIMARY_RUNNING_STATE_ID } from '../domain/running/runProgram.js';
+import { normaliseLegacyRunSession } from '../domain/running/runEvidence.js';
 
 export function timestamped(record, now = new Date().toISOString()) {
   return { schemaVersion:RECORD_SCHEMA_VERSION, createdAt:now, updatedAt:now, ...record };
@@ -53,4 +55,14 @@ export async function migrateToVersion3(transaction) {
   const meta=transaction.table('appMeta'); const app=await meta.get('app');
   if(app) await meta.put({...app,completedMigrations:[...new Set([...(app.completedMigrations||[1,2]),3])],updatedAt:now,schemaVersion:3});
   await transaction.table('auditEvents').put(timestamped({id:`migration-3-${now}`,type:'migration-completed',migrationVersion:3,legacyKnownWeightPolicy:'estimated'},now));
+}
+
+export async function migrateToVersion4(transaction) {
+  const now=new Date().toISOString();
+  await transaction.table('runSessions').toCollection().modify(record=>Object.assign(record,normaliseLegacyRunSession(record),{schemaVersion:4,updatedAt:record.updatedAt||now}));
+  const running=transaction.table('runProgressionStates');
+  if(!await running.get(PRIMARY_RUNNING_STATE_ID))await running.put({...createRunProgressionState(now),schemaVersion:4});
+  const meta=transaction.table('appMeta'); const app=await meta.get('app');
+  if(app)await meta.put({...app,completedMigrations:[...new Set([...(app.completedMigrations||[1,2,3]),4])],updatedAt:now,schemaVersion:4});
+  await transaction.table('auditEvents').put(timestamped({id:`migration-4-${now}`,type:'migration-completed',migrationVersion:4,legacyRunPolicy:'unambiguous starter-run mapped to run-walk-stage-01; effort remains null'},now));
 }

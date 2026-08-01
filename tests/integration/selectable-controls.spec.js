@@ -99,7 +99,7 @@ test('light and dark application choices expose visible labels, state, focus and
   await page.getByRole('button',{name:'Close dialog'}).click();
 
   await page.getByRole('button',{name:'Week'}).click();
-  await page.locator('[data-action="preview-run"]').click();
+  await page.getByRole('button',{name:'Open running'}).click();
   await assertChoiceFamily(page,'run-guidance',{minimum:3});
   await page.getByRole('button',{name:/Chimes only/}).click();
   await expect(page.locator('[data-run-audio-mode="chimes"]')).toHaveAttribute('aria-pressed','true');

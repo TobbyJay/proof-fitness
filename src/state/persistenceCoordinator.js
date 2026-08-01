@@ -1,6 +1,6 @@
 import { database, openDatabase } from '../db/database.js';
 import { createRepositories } from '../db/repositories/index.js';
-import { completeOnboardingTransaction, completeWorkoutTransaction, exportDatabase, localDate, newId, persistProgrammeDecision, replaceDatabaseFromExport } from '../db/transactions.js';
+import { completeOnboardingTransaction, completeRunEvidenceTransaction, completeWorkoutTransaction, exportDatabase, localDate, newId, persistProgrammeDecision, replaceDatabaseFromExport } from '../db/transactions.js';
 import { timestamped } from '../db/migrations.js';
 import { hydrateState } from './hydrateState.js';
 
@@ -50,6 +50,8 @@ export class PersistenceCoordinator {
   completeWorkout(active,programme,status='completed') { return completeWorkoutTransaction(this.db,active,programme,status); }
   async discardWorkout(id) { await this.repos.activeWorkouts.delete(id); await this.repos.audit.put({id:newId('audit'),type:'workout-discarded',entityId:id}); }
   saveRun(value) { return this.repos.runs.put({ id:value.id||newId('run'),localDate:value.localDate||localDate(),runTemplateId:'starter-run',runTemplateVersion:1,...value }); }
+  completeRunEvidence(value,programmeState) { return completeRunEvidenceTransaction(this.db,value,programmeState); }
+  saveRunningProgression(value) { return this.repos.runningProgression.put(value); }
   exportAll(programmeVersion) { return exportDatabase(this.db,programmeVersion); }
   importReplace(payload) { return replaceDatabaseFromExport(this.db,payload); }
   async resetAll() { this.db.close(); await this.db.delete(); }

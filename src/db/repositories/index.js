@@ -7,7 +7,7 @@ export function createRepositories(database) {
     programme:createRepository(database,'programmeStates'), transitions:createRepository(database,'programmeTransitions'),
     reviews:createRepository(database,'programmeReviews'), scheduleOverrides:createRepository(database,'scheduleOverrides'),
     activeWorkouts:createRepository(database,'activeWorkoutSessions'), workouts:createRepository(database,'workoutSessions'),
-    runs:createRepository(database,'runSessions'), meals:createRepository(database,'mealChecks'),
+    runs:createRepository(database,'runSessions'), runningProgression:createRepository(database,'runProgressionStates'), meals:createRepository(database,'mealChecks'),
     checkIns:createRepository(database,'dailyCheckIns'), measurements:createRepository(database,'measurements'),
     progression:createRepository(database,'exerciseProgressionStates'), audit:createRepository(database,'auditEvents')
   });

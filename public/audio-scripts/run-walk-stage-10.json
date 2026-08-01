@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "run-walk-stage-10",
+  "version": 1,
+  "name": "Continuous 30",
+  "durationSeconds": 2400,
+  "phases": [
+    {
+      "id": "warmup",
+      "type": "warm-up-walk",
+      "label": "BRISK WARM-UP WALK",
+      "startSeconds": 0,
+      "durationSeconds": 300,
+      "round": null,
+      "instruction": "Walk briskly for five minutes and prepare to run easily.",
+      "cue": "Build warmth without rushing.",
+      "warning": "Ten seconds remaining. Prepare for an easy continuous run.",
+      "encouragement": "Build warmth without rushing.",
+      "completionInstruction": "Run continuously for 30 minutes at an easy pace."
+    },
+    {
+      "id": "continuous-run",
+      "type": "easy-run",
+      "label": "CONTINUOUS EASY RUN",
+      "startSeconds": 300,
+      "durationSeconds": 1800,
+      "round": null,
+      "instruction": "Run continuously for 30 minutes at an easy pace.",
+      "cue": "Easy pace. Stay controlled, keep your stride relaxed, and slow down if the run begins to feel like a race.",
+      "warning": "Ten seconds remaining. Prepare for the cool-down walk.",
+      "encouragement": "Easy pace. Stay controlled, keep your stride relaxed, and slow down if the run begins to feel like a race.",
+      "completionInstruction": "Walk easily for five minutes to cool down."
+    },
+    {
+      "id": "cooldown",
+      "type": "cool-down-walk",
+      "label": "COOL-DOWN WALK",
+      "startSeconds": 2100,
+      "durationSeconds": 300,
+      "round": null,
+      "instruction": "Walk easily for five minutes to cool down.",
+      "cue": "Let your breathing settle gradually.",
+      "warning": "Ten seconds remaining. Keep walking easily.",
+      "encouragement": "Let your breathing settle gradually.",
+      "completionInstruction": "Session complete. Continue walking until you feel settled."
+    }
+  ]
+}

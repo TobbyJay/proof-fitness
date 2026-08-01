@@ -2,6 +2,8 @@
 
 ## Unreleased — Production integration audit
 
+- Added independent running programme v1 with the unchanged starter as Stage 1, ten run/walk-to-continuous stages, 30–40 minute aerobic consolidation, explicit progression/repeat/regression decisions, milestones, readiness advice, hybrid unlock, and strength-independent scheduling.
+- Added IndexedDB/schema v4 running progression state, preserving legacy starter-run migration, atomic idempotent run evidence finalization, export/restore support, and versioned static coach/chime timelines with offline caching.
 - Replaced binary tare confidence with measured/estimated/unknown equipment mass, added separate collar count/weight, and included exactly two collars per implement (four per matched pair) in assembled-load snapshots.
 - Added the preserving IndexedDB v2 → v3 migration, conservative legacy-known → estimated conversion, enum-validated export/restore, historical mass-provenance snapshots, and mobile light/dark regression coverage.
 - Added explicit barbell/handle tare configuration with honest unknown states and a preserving IndexedDB v1 → v2 migration.

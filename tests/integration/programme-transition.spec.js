@@ -23,6 +23,8 @@ async function openBlockPlan(page) {
 test('Week 4 ready review persists and transitions through four- and three-day modes', async ({ page }) => {
   await completeOnboarding(page);
   const programme=(await readStore(page,'programmeStates'))[0];
+  const running=(await readStore(page,'runProgressionStates'))[0];
+  await putRecords(page,'runProgressionStates',[{...running,currentStageId:'run-walk-stage-05',updatedAt:new Date().toISOString()}]);
   await putRecords(page,'programmeStates',[{...programme,currentProgrammeWeek:4,updatedAt:new Date().toISOString()}]);
   await putRecords(page,'workoutSessions',completedFoundationRecords(programme.id,10));
   await page.reload();
@@ -47,6 +49,7 @@ test('Week 4 ready review persists and transitions through four- and three-day m
   review=(await readStore(page,'programmeReviews'))[0];
   expect(review.userDecision).toBe('lean-athletic-four-day');
   expect((await readStore(page,'workoutSessions')).length).toBe(10);
+  expect((await readStore(page,'runProgressionStates'))[0]).toMatchObject({currentStageId:'run-walk-stage-05',frequencyIntent:'one-primary'});
 
   await page.reload();
   await expect(page.locator('#todayWorkoutName')).toHaveText('Lower A');
@@ -57,6 +60,7 @@ test('Week 4 ready review persists and transitions through four- and three-day m
   stored=(await readStore(page,'programmeStates'))[0];
   expect(stored.scheduleMode).toBe('lean-athletic-three-day');
   expect(stored.currentProgrammeWeek).toBe(5);
+  expect((await readStore(page,'runProgressionStates'))[0].currentStageId).toBe('run-walk-stage-05');
   const now=new Date().toISOString();
   await putRecords(page,'workoutSessions',[...await readStore(page,'workoutSessions'),{
     id:'audit-fallback-a',status:'completed',programmeStateId:stored.id,programmePhase:'lean-athletic',
@@ -76,6 +80,7 @@ test('Week 4 ready review persists and transitions through four- and three-day m
   expect(transitions.some(item=>item.fromScheduleMode==='lean-athletic-four-day'&&item.toScheduleMode==='lean-athletic-three-day')).toBeTruthy();
   expect(transitions.some(item=>item.fromScheduleMode==='lean-athletic-three-day'&&item.toScheduleMode==='lean-athletic-four-day')).toBeTruthy();
   expect((await readStore(page,'workoutSessions')).length).toBe(11);
+  expect((await readStore(page,'runProgressionStates'))[0].currentStageId).toBe('run-walk-stage-05');
 });
 
 for (const [count, expected, heading] of [

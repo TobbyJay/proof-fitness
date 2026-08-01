@@ -21,7 +21,8 @@ test('clean production install exposes only empty, post-bootstrap state', async 
     dailyCheckIns: 0,
     measurements: 0,
     exerciseProgressionStates: 0,
-    programmeReviews: 0
+    programmeReviews: 0,
+    runProgressionStates: 1
   });
 });
 
@@ -38,6 +39,7 @@ test('completed onboarding starts the approved empty Foundation state', async ({
   await expect(page.locator('#streakLabel')).toHaveText('0 days');
   expect((await readStore(page, 'workoutSessions')).length).toBe(0);
   expect((await readStore(page, 'runSessions')).length).toBe(0);
+  expect((await readStore(page, 'runProgressionStates'))[0]).toMatchObject({currentStageId:'run-walk-stage-01',runProgramVersion:1});
   expect((await readStore(page, 'measurements')).map(item => item.value).sort()).toEqual([74.5, 81.2]);
 });
 

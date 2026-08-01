@@ -13,6 +13,7 @@ This domain is the programme source of truth. It is deliberately separate from t
 - `src/domain/reviews/` owns the deterministic Foundation readiness review.
 - `src/domain/scheduling/` owns schedule modes and completion-ordered rotation.
 - `src/domain/workouts/` validates templates, estimates duration, and creates immutable execution snapshots.
+- `src/domain/running/` owns independent running programme v1, templates, evidence, readiness, scheduling, milestones, and explicit progression decisions.
 - `src/app.js` renders hydrated records and coordinates user actions. It is not the authoritative programme definition.
 
 The layers are intentionally distinct: exercise definition ≠ workout template ≠ programme state ≠ workout session ≠ rendered interface.
@@ -69,6 +70,8 @@ The recommended transition begins in Week 5 when ready.
 - Upper B: bent-over row, conditional pull-up/pullover slot, push-up or squeeze floor press, first-class barbell curl, lying triceps extension, optional lateral raise.
 
 `optional-e` supports coached easy run–walk, brisk walk, mobility, light core, and very light calf/lateral-raise work when recovery supports it. It is not required, cannot replace a required strength workout automatically, and does not generate unrelated progression evidence.
+
+Running remains 0–1 optional sessions in Foundation and one recommended easy session in Lean Athletic where recovery permits. Its stage survives four-day/three-day transitions. A later hybrid context may expose—but never require—a second controlled quality session after the continuous base is consolidated. See `RUNNING_DOMAIN.md`.
 
 `lean-athletic-three-day` is a permanent post-Foundation mode, not an extension of Foundation. Its A/B/C full-body templates retain squat/lunge, hinge, chest press, horizontal pull, vertical pull or pullover, shoulder, arm, and core exposure. Switching to it is a scheduling choice, not failure.
 

@@ -30,7 +30,7 @@ test('cached production shell reloads and accepts local writes offline', async (
   await completeOnboarding(page,{guidance:'visual'});
   await waitForControlledServiceWorker(page);
   const cachedAssets=await page.evaluate(async () => {
-    const cache=await caches.open('proof-fitness-v1.1.0');
+    const cache=await caches.open('proof-fitness-v1.2.0');
     return (await cache.keys()).map(request=>new URL(request.url).pathname);
   });
   expect(cachedAssets.some(path=>path.startsWith('/assets/')&&path.endsWith('.js'))).toBeTruthy();
@@ -44,7 +44,7 @@ test('cached production shell reloads and accepts local writes offline', async (
   await page.getByRole('button',{name:'Ate planned'}).first().click();
   expect((await readStore(page,'mealChecks')).length).toBe(1);
   await page.getByRole('button',{name:'Week'}).click();
-  await page.getByRole('button',{name:'Open starter run'}).click();
-  await expect(page.getByRole('heading',{name:/Run–walk/i})).toBeVisible();
+  await page.getByRole('button',{name:'Open running'}).click();
+  await expect(page.getByRole('heading',{name:/Foundation Run–Walk/i})).toBeVisible();
   await page.unroute('**/*');
 });

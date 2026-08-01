@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "run-walk-stage-04",
+  "sessionVersion": 1,
+  "durationSeconds": 1950,
+  "voiceEngine": "kokoro",
+  "voice": "bf_emma",
+  "language": "b",
+  "speed": 0.95,
+  "kokoroVersion": "0.9.4",
+  "generatedAt": "2026-08-01T19:33:08Z",
+  "mastering": {
+    "integratedLufs": -16,
+    "truePeakDb": -1.5,
+    "sampleRate": 24000,
+    "opusBitrate": "32k"
+  },
+  "files": {
+    "opus": {
+      "path": "/audio/coach/run-walk-stage-04-coach.opus",
+      "sha256": "807a2f97b9c77acbdc9cd3894aeafe3eecb6b87172d5b45250de948ea8df8c06"
+    },
+    "chimes": {
+      "path": "/audio/chimes/run-walk-stage-04-chimes.opus",
+      "sha256": "19aa8b9b3aa1e0d5ddeece1e8f74c1c8d29950525091a77b0b2641bea4f5f0bc"
+    }
+  },
+  "cues": [
+    {
+      "id": "warmup",
+      "timeSeconds": 0,
+      "phase": "warm-up-walk",
+      "kind": "start"
+    },
+    {
+      "id": "warmup-warning",
+      "timeSeconds": 290,
+      "phase": "warm-up-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-1",
+      "timeSeconds": 300,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-1-warning",
+      "timeSeconds": 470,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-1",
+      "timeSeconds": 480,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-1-warning",
+      "timeSeconds": 560,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-2",
+      "timeSeconds": 570,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-2-warning",
+      "timeSeconds": 740,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-2",
+      "timeSeconds": 750,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-2-warning",
+      "timeSeconds": 830,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-3",
+      "timeSeconds": 840,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-3-warning",
+      "timeSeconds": 1010,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-3",
+      "timeSeconds": 1020,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-3-warning",
+      "timeSeconds": 1100,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-4",
+      "timeSeconds": 1110,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-4-warning",
+      "timeSeconds": 1280,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-4",
+      "timeSeconds": 1290,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-4-warning",
+      "timeSeconds": 1370,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "run-round-5",
+      "timeSeconds": 1380,
+      "phase": "easy-run",
+      "kind": "start"
+    },
+    {
+      "id": "run-round-5-warning",
+      "timeSeconds": 1550,
+      "phase": "easy-run",
+      "kind": "warning"
+    },
+    {
+      "id": "walk-round-5",
+      "timeSeconds": 1560,
+      "phase": "recovery-walk",
+      "kind": "start"
+    },
+    {
+      "id": "walk-round-5-warning",
+      "timeSeconds": 1640,
+      "phase": "recovery-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "cooldown",
+      "timeSeconds": 1650,
+      "phase": "cool-down-walk",
+      "kind": "start"
+    },
+    {
+      "id": "cooldown-warning",
+      "timeSeconds": 1940,
+      "phase": "cool-down-walk",
+      "kind": "warning"
+    },
+    {
+      "id": "session-complete",
+      "timeSeconds": 1950,
+      "phase": "complete",
+      "kind": "completion"
+    }
+  ]
+}

@@ -12,13 +12,15 @@ Physical installed-PWA testing on iPhone and Android is still required. Proof Fi
 
 Proof Fitness now uses Dexie over IndexedDB for account-free, backend-free local persistence. First render waits for database migration and hydration. A database failure opens recovery controls rather than appearing to be a new installation.
 
-Durable flows include partial/completed onboarding, explicit known/unknown implement tare weights, programme state and A/B/C or Lean Athletic rotations, Week 4 reviews and user decisions, programme transitions, pull-up equipment safety, immutable loading-aware active workout snapshots, completed/partial workouts with actual set evidence, runs and audio position, meals, check-ins, measurements, exercise progression recommendations and decisions, export/restore, and reset.
+Durable flows include partial/completed onboarding, explicit known/unknown implement tare weights, programme state and A/B/C or Lean Athletic rotations, Week 4 reviews and user decisions, programme transitions, pull-up equipment safety, immutable loading-aware active workout snapshots, completed/partial workouts with actual set evidence, versioned running stage/evidence/recommendations/audio recovery, meals, check-ins, measurements, exercise progression recommendations and decisions, export/restore, and reset.
 
 Fresh installations contain no completed activity, measurements, history, reviews, progression evidence, or non-zero streak. Planned programme and meal content remains visible without being recorded as completed.
 
 ## Programme domain
 
 Programme domain v1 remains the single source of truth. It includes 44 versioned exercises, Foundation A/B/C, four-day Lean Athletic, optional E, permanent three-day Lean Athletic, deterministic Week 4 review rules, extensions, pull-up fallback, progression, transitions, duration estimates, and immutable workout snapshots.
+
+Running programme v1 is independent. It provides ten beginner-to-continuous stages, aerobic-base 30/35/40, user-confirmed evidence progression, readiness-aware Optional E advice, and a later opt-in controlled quality template without modifying strength rotation or adherence.
 
 ## Current limitations
 

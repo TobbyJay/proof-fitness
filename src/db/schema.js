@@ -1,6 +1,6 @@
 export const DATABASE_NAME = 'proof-fitness';
-export const DATABASE_VERSION = 3;
-export const RECORD_SCHEMA_VERSION = 3;
+export const DATABASE_VERSION = 4;
+export const RECORD_SCHEMA_VERSION = 4;
 
 export const SCHEMA_V1 = Object.freeze({
   appMeta: 'id, onboardingCompletedAt, updatedAt',
@@ -25,9 +25,11 @@ export const SCHEMA_V1 = Object.freeze({
 export const SCHEMA_V2 = SCHEMA_V1;
 // Version 3 evolves equipment records and loading snapshots in place; stores are unchanged.
 export const SCHEMA_V3 = SCHEMA_V2;
+// Version 4 adds first-class running progression while preserving runSessions.
+export const SCHEMA_V4 = Object.freeze({...SCHEMA_V3,runProgressionStates:'id, currentStageId, updatedAt'});
 
 export const EXPORT_TABLES = Object.freeze([
   'userProfile','preferences','equipment','programmeStates','programmeTransitions',
   'programmeReviews','scheduleOverrides','activeWorkoutSessions','workoutSessions',
-  'runSessions','mealChecks','dailyCheckIns','measurements','exerciseProgressionStates','auditEvents'
+  'runSessions','runProgressionStates','mealChecks','dailyCheckIns','measurements','exerciseProgressionStates','auditEvents'
 ]);

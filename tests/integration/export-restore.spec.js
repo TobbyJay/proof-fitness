@@ -29,7 +29,8 @@ test('production-shaped export resets and restores transactionally without dupli
   const download=await downloadPromise;
   const backupPath=await download.path();
   const payload=JSON.parse(await readFile(backupPath,'utf8'));
-  expect(payload.manifest).toMatchObject({product:'proof-fitness',schemaVersion:3,programmeVersion:1});
+  expect(payload.manifest).toMatchObject({product:'proof-fitness',schemaVersion:4,programmeVersion:1});
+  expect(payload.runProgressionStates).toHaveLength(1);
   expect(payload.exerciseProgressionStates).toHaveLength(1);
   expect(payload.runSessions).toHaveLength(1);
   expect(payload.workoutSessions).toHaveLength(3);
