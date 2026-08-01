@@ -19,6 +19,12 @@ export class PersistenceCoordinator {
   saveCheckIn(value) { return this.repos.checkIns.put({ id:localDate(),localDate:localDate(),...value }); }
   saveMeasurement(type,value,note='') { return this.repos.measurements.put({ id:newId('measurement'),localDate:localDate(),type,value,note }); }
   saveProgression(value) { return this.repos.progression.put({ id:`${value.exerciseId}@${value.exerciseVersion}`,...value }); }
+  async saveProgressionAndEquipment(progression,equipment) {
+    return this.db.transaction('rw',this.db.exerciseProgressionStates,this.db.equipment,async()=>{
+      const savedProgression=await this.repos.progression.put({id:`${progression.exerciseId}@${progression.exerciseVersion}`,...progression});
+      const savedEquipment=await this.repos.equipment.put({id:'equipment',...equipment}); return {progression:savedProgression,equipment:savedEquipment};
+    });
+  }
   async startWorkout(snapshot, execution={}) {
     const now=new Date().toISOString(); const today=localDate();
     return this.db.transaction('rw',this.db.activeWorkoutSessions,this.db.workoutSessions,async()=>{
@@ -26,17 +32,19 @@ export class PersistenceCoordinator {
       if(completed){const error=new Error('This workout has already been completed.');error.name='WorkoutAlreadyCompletedError';throw error;}
       const existing=await this.db.activeWorkoutSessions.where('templateId').equals(snapshot.templateId).filter(record=>record.localDate===today&&['active','paused'].includes(record.status)).first();
       if(existing) return existing;
-      const record=timestamped({ id:newId('workout'),localDate:today,status:'active',workoutSnapshot:snapshot,workoutNameSnapshot:snapshot.workoutName,exercisesSnapshot:snapshot.exercises,equipmentSnapshot:snapshot.equipmentSnapshot,pullUpAvailabilitySnapshot:snapshot.pullUpAvailabilitySnapshot,programmeId:snapshot.programmeId,programmeVersion:snapshot.programmeVersion,programmePhase:snapshot.programmePhase,scheduleMode:snapshot.scheduleMode,templateSetId:snapshot.templateSetId,templateSetVersion:snapshot.templateSetVersion,templateId:snapshot.templateId,templateVersion:snapshot.templateVersion,startedAt:now,currentExerciseIndex:0,currentSetIndex:0,completedSets:{},calibration:{},substitutions:{},readiness:{},restDeadline:null,...execution},now);
+      const record=timestamped({ id:newId('workout'),localDate:today,status:'active',workoutSnapshot:snapshot,workoutNameSnapshot:snapshot.workoutName,exercisesSnapshot:snapshot.exercises,equipmentSnapshot:snapshot.equipmentSnapshot,pullUpAvailabilitySnapshot:snapshot.pullUpAvailabilitySnapshot,programmeId:snapshot.programmeId,programmeVersion:snapshot.programmeVersion,programmePhase:snapshot.programmePhase,scheduleMode:snapshot.scheduleMode,templateSetId:snapshot.templateSetId,templateSetVersion:snapshot.templateSetVersion,templateId:snapshot.templateId,templateVersion:snapshot.templateVersion,startedAt:now,currentExerciseIndex:0,currentSetIndex:0,completedSets:{},setPerformance:{},calibration:{},substitutions:{},readiness:{},formConfidence:{},discomfortFlags:{},restDeadline:null,...execution},now);
       await this.db.activeWorkoutSessions.put(record); return record;
     });
   }
   async updateWorkout(id,patch) { const current=await this.repos.activeWorkouts.get(id); if(!current) throw new Error('Active workout could not be found.'); return this.repos.activeWorkouts.put({ ...current,...patch }); }
-  async updateWorkoutAndProgression(id,patch,progression) {
-    return this.db.transaction('rw',this.db.activeWorkoutSessions,this.db.exerciseProgressionStates,async()=>{
+  async updateWorkoutAndProgression(id,patch,progression,equipment=null) {
+    const tables=[this.db.activeWorkoutSessions,this.db.exerciseProgressionStates]; if(equipment) tables.push(this.db.equipment);
+    return this.db.transaction('rw',tables,async()=>{
       const current=await this.repos.activeWorkouts.get(id); if(!current) throw new Error('Active workout could not be found.');
       const workout=await this.repos.activeWorkouts.put({...current,...patch});
       const evidence=await this.repos.progression.put({id:`${progression.exerciseId}@${progression.exerciseVersion}`,...progression});
-      return {workout,evidence};
+      const savedEquipment=equipment?await this.repos.equipment.put({id:'equipment',...equipment}):null;
+      return {workout,evidence,equipment:savedEquipment};
     });
   }
   completeWorkout(active,programme,status='completed') { return completeWorkoutTransaction(this.db,active,programme,status); }

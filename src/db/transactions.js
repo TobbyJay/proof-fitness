@@ -3,6 +3,8 @@ import { EXPORT_TABLES, RECORD_SCHEMA_VERSION } from './schema.js';
 import { timestamped } from './migrations.js';
 import { getWorkoutTemplate } from '../domain/programmes/programmeCatalog.js';
 import { getExercise } from '../domain/exercises/exerciseCatalog.js';
+import { normaliseEquipment } from '../domain/equipment/equipmentCatalog.js';
+import { isEquipmentWeightSource } from '../domain/equipment/equipmentWeight.js';
 
 export function newId(prefix) {
   const suffix = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -74,10 +76,13 @@ export function validateImport(payload) {
   if (payload.appMeta?.id !== 'app') throw new Error('Backup is missing valid application metadata.');
   for (const table of EXPORT_TABLES) if (!Array.isArray(payload[table])) throw new Error(`Backup is missing ${table}.`);
   for (const table of EXPORT_TABLES) for (const record of payload[table]) if (!record||typeof record.id!=='string') throw new Error(`Backup contains an invalid ${table} record.`);
+  for(const equipment of payload.equipment) for(const source of [equipment.barbell?.weight?.weightSource,equipment.dumbbellHandle?.weight?.weightSource,equipment.collars?.weight?.weightSource].filter(value=>value!==undefined)) if(!isEquipmentWeightSource(source)) throw new Error('Backup contains an invalid equipment weight source.');
   for (const session of [...payload.activeWorkoutSessions,...payload.workoutSessions]) {
     try { getWorkoutTemplate(session.templateId); } catch { throw new Error(`Backup references unavailable workout template ${session.templateId}.`); }
     for (const exercise of session.exercisesSnapshot||session.workoutSnapshot?.exercises||[]) {
       try { getExercise(exercise.exerciseId); } catch { throw new Error(`Backup references unavailable exercise ${exercise.exerciseId}.`); }
+      const guidance=exercise.loadingGuidanceSnapshot||exercise.loadSnapshot;
+      for(const source of [guidance?.barbellBodyWeightSource,guidance?.handleWeightSource,guidance?.collarWeightSource,guidance?.totalLoadSource].filter(value=>value!==undefined)) if(!isEquipmentWeightSource(source)) throw new Error('Backup contains an invalid loading weight source.');
     }
   }
   return true;
@@ -88,7 +93,16 @@ export async function replaceDatabaseFromExport(database, payload) {
   const tables = ['appMeta', ...EXPORT_TABLES];
   await database.transaction('rw', tables.map(name => database.table(name)), async () => {
     for (const name of tables) await database.table(name).clear();
-    if (payload.appMeta) await database.appMeta.put(payload.appMeta);
-    for (const name of EXPORT_TABLES) if (payload[name].length) await database.table(name).bulkPut(payload[name]);
+    if (payload.appMeta) await database.appMeta.put({...payload.appMeta,schemaVersion:RECORD_SCHEMA_VERSION,completedMigrations:[...new Set([...(payload.appMeta.completedMigrations||[]),1,2,3])]});
+    for (const name of EXPORT_TABLES) if (payload[name].length) {
+      let records=payload[name];
+      if(name==='equipment') records=records.map(record=>({...normaliseEquipment(record),id:record.id,createdAt:record.createdAt,updatedAt:record.updatedAt,schemaVersion:RECORD_SCHEMA_VERSION}));
+      if(name==='exerciseProgressionStates') records=records.map(record=>{
+        const loadingMode=record.loadingMode||getExercise(record.exerciseId).loadingMode;
+        const currentWorkingLoad=typeof record.currentWorkingLoad==='number'?{loadingMode,plateLoadKg:record.currentWorkingLoad}:record.currentWorkingLoad;
+        return {...record,loadingMode,currentWorkingLoad,performances:record.performances||[],decisions:record.decisions||[],schemaVersion:RECORD_SCHEMA_VERSION};
+      });
+      await database.table(name).bulkPut(records);
+    }
   });
 }

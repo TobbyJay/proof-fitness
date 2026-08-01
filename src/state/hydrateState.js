@@ -1,5 +1,6 @@
 import { createEmptyProductionState } from './createEmptyProductionState.js';
 import { createRepositories } from '../db/repositories/index.js';
+import { normaliseEquipment } from '../domain/equipment/equipmentCatalog.js';
 
 export function calculateDerived(records, today = new Date()) {
   return { streak:calculateStreak(records,today), completedWorkouts:records.workouts.filter(x=>x.status==='completed').length, completedRuns:records.runs.filter(x=>x.status==='completed').length, mealChecks:records.mealChecks.filter(x=>x.status!=='unchecked').length };
@@ -27,6 +28,6 @@ export async function hydrateState(database) {
   const [appMeta,profile,preferences,equipment,programmes,transitions,reviews,activeWorkouts,workouts,runs,mealChecks,checkIns,measurements,progression] = await Promise.all([
     repos.appMeta.get('app'),repos.profile.get('profile'),repos.preferences.get('preferences'),repos.equipment.get('equipment'),repos.programme.all(),repos.transitions.all(),repos.reviews.all(),repos.activeWorkouts.all(),repos.workouts.all(),repos.runs.all(),repos.meals.all(),repos.checkIns.all(),repos.measurements.all(),repos.progression.all()
   ]);
-  Object.assign(state,{appMeta,profile,preferences:preferences||state.preferences,equipment:equipment||state.equipment,programme:programmes.find(x=>x.id===appMeta?.activeProgrammeStateId)||null,transitions,reviews,activeWorkout:activeWorkouts.find(x=>x.status==='active'||x.status==='paused')||null,workouts,runs,mealChecks,checkIns,measurements,progression});
+  Object.assign(state,{appMeta,profile,preferences:preferences||state.preferences,equipment:normaliseEquipment(equipment||state.equipment),programme:programmes.find(x=>x.id===appMeta?.activeProgrammeStateId)||null,transitions,reviews,activeWorkout:activeWorkouts.find(x=>x.status==='active'||x.status==='paused')||null,workouts,runs,mealChecks,checkIns,measurements,progression});
   state.derived=calculateDerived(state); return state;
 }

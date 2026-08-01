@@ -9,6 +9,7 @@ Proof Fitness is a local-first home strength, Nigerian nutrition, running, and a
 - Four-day Lean Athletic and a permanent three-day Lean Athletic alternative that preserve history and progression.
 - Optional E conditioning/recovery, including the approved 28-minute run–walk session: five-minute warm-up, six 1-minute run/2-minute walk rounds, and five-minute cool-down.
 - Immutable active-workout snapshots, set/rest recovery, exercise-ID progression, and conditional pull-up/pullover behavior.
+- Exact barbell and dumbbell assembly guidance with collar-aware totals and measured/estimated/unknown equipment mass, actual rep logging, and user-confirmed double progression through physically achievable plate loads.
 - Local meal checks, daily check-ins, measurements, history, and derived streaks.
 - Versioned JSON export and transactional replace restore.
 
@@ -44,7 +45,7 @@ The Data screen exports every durable record, including active workout snapshots
 
 “Reset all Proof Fitness data” requires typing `RESET`, deletes IndexedDB and Proof Fitness caches, and returns to onboarding only after deletion succeeds.
 
-See [Persistence](docs/PERSISTENCE.md), [Programme domain](docs/PROGRAMME_DOMAIN.md), [production audit](docs/PRODUCTION_AUDIT.md), [manual PWA checklist](docs/MANUAL_PWA_TEST_CHECKLIST.md), and [Product status](docs/PRODUCT_STATUS.md).
+See [Load guidance](docs/LOAD_GUIDANCE.md), [Progressive overload](docs/PROGRESSIVE_OVERLOAD.md), [Persistence](docs/PERSISTENCE.md), [Programme domain](docs/PROGRAMME_DOMAIN.md), [production audit](docs/PRODUCTION_AUDIT.md), [manual PWA checklist](docs/MANUAL_PWA_TEST_CHECKLIST.md), and [Product status](docs/PRODUCT_STATUS.md).
 
 The automated production audit is complete. The current release category is **READY FOR DEVICE ACCEPTANCE TESTING**, not fully production-released: installed iPhone and Android checks remain mandatory.
 

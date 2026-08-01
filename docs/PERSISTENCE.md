@@ -2,7 +2,7 @@
 
 ## Database and schema
 
-Proof Fitness uses Dexie with IndexedDB database `proof-fitness`, database version `1`, and record schema version `1`. Durable records use stable IDs, ISO `createdAt`/`updatedAt` timestamps, and explicit `YYYY-MM-DD` local dates for accountability.
+Proof Fitness uses Dexie with IndexedDB database `proof-fitness`, database version `3`, and record schema version `3`. Durable records use stable IDs, ISO `createdAt`/`updatedAt` timestamps, and explicit `YYYY-MM-DD` local dates for accountability.
 
 | Store | Responsibility |
 | --- | --- |
@@ -15,7 +15,7 @@ Proof Fitness uses Dexie with IndexedDB database `proof-fitness`, database versi
 | `workoutSessions` | Completed and partial strength history |
 | `runSessions` | Run status, continuous-audio position, phase, mode, and local date |
 | `mealChecks`, `dailyCheckIns`, `measurements` | Daily accountability and user-entered measurements |
-| `exerciseProgressionStates` | Exercise ID/version-specific calibration and recommendations |
+| `exerciseProgressionStates` | Exercise ID/version-specific working loads, performance evidence, recommendations, and decisions |
 | `auditEvents` | Migration and high-value lifecycle events |
 
 ## Lifecycle and transactions
@@ -32,11 +32,11 @@ Run records retain the starter template reference, guidance mode, continuous-med
 
 ## Migrations
 
-Version 1 establishes explicit store/index declarations and repeat-safe application metadata. The database version must be incremented deliberately for future changes; upgrade callbacks must transform records without delete/recreate. `completedMigrations` and audit events provide migration evidence. Historical workout snapshots and stable domain IDs are preserved.
+Version 1 establishes explicit store/index declarations and repeat-safe application metadata. Version 2 keeps those stores, adds explicit nested barbell/handle tare state, converts legacy numeric working loads to canonical load objects, and initializes performance/decision arrays. Version 3 evolves equipment in place to `measured` / `estimated` / `unknown`, adds collar count and collar-mass provenance, and does not create or clear stores. Because version 2's binary “known” flag does not prove a scale measurement, a positive legacy value migrates conservatively to `estimated`; an unknown legacy value becomes `unknown` with `null` mass. Historical workout guidance is not recalculated or given invented collar metadata.
 
 ## Export, restore, and reset
 
-Export produces JSON with a `proof-fitness` manifest, schema/programme versions, timestamp, metadata, and all stores. Restore rejects invalid products, missing store arrays, and future schemas before a single replace transaction. It does not rewrite historical snapshots or export browser/audio caches.
+Export produces JSON with a `proof-fitness` manifest, schema/programme versions, timestamp, metadata, and all stores, including barbell-body, dumbbell-handle, and collar masses and sources, collar count, performance evidence, working loads, decisions, and historical loading snapshots. Restore rejects invalid products, missing store arrays, invalid mass-source enums, and future schemas before a single replace transaction. Older valid exports without collar metadata are upgraded safely with unknown collar mass. Restore does not rewrite historical snapshots or export browser/audio caches.
 
 Reset requires the explicit phrase `RESET`, deletes the database, removes only Proof Fitness caches, and reloads into a fresh migration/onboarding path.
 

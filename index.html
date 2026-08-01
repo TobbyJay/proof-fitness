@@ -361,7 +361,21 @@
               <div><span>Strength + run sessions</span><strong id="dataSessionCount">0</strong></div>
               <div><span>Meal checks</span><strong id="dataMealChecks">0</strong></div>
               <div><span>Measurements</span><strong id="dataMeasurements">0</strong></div>
-              <div><span>Database schema</span><strong>1</strong></div>
+              <div><span>Database schema</span><strong>3</strong></div>
+            </section>
+
+            <section class="equipment-loading-settings" id="equipmentLoadingSettings">
+              <div class="section-heading-row"><div><span class="eyebrow">Equipment / Loading</span><h2>Equipment weights</h2></div><span class="status-pill neutral">Measured · Estimated · Unknown</span></div>
+              <p>Proof includes collars in assembled loads. Plate-loading instructions still work when any equipment weight is unknown.</p>
+              <div class="equipment-weight-grid">
+                <fieldset><legend>Barbell body</legend><label>Confidence <select id="settingsBarSource"><option value="unknown">Unknown</option><option value="estimated">Estimated</option><option value="measured">Measured</option></select></label><label>Weight <input id="settingsBarWeight" type="number" min="0.01" max="50" step="0.01" inputmode="decimal"> kg</label></fieldset>
+                <fieldset><legend>Dumbbell handle</legend><label>Confidence <select id="settingsDumbbellSource"><option value="unknown">Unknown</option><option value="estimated">Estimated</option><option value="measured">Measured</option></select></label><label>Weight <input id="settingsDumbbellWeight" type="number" min="0.01" max="10" step="0.01" inputmode="decimal"> kg each</label></fieldset>
+                <fieldset><legend>Spin-lock collar</legend><label>Confidence <select id="settingsCollarSource"><option value="unknown">Unknown</option><option value="estimated">Estimated</option><option value="measured">Measured</option></select></label><label>Weight <input id="settingsCollarWeight" type="number" min="0.01" max="3" step="0.01" inputmode="decimal"> kg each</label><small>6 owned · Proof uses 2 on a barbell and 2 per dumbbell.</small></fieldset>
+              </div>
+              <div class="plate-inventory-settings"><strong>Plate inventory</strong><span>6 × 0.5 kg · 6 × 1.25 kg · 4 × 2.5 kg · 4 × 5 kg</span><b>40.5 kg removable plates</b></div>
+              <div class="loading-terms"><div><strong>Assembled load</strong><span>Body or handle + collars + plates</span></div><div><strong>Plate load</strong><span>Removable plates only</span></div><div><strong>History</strong><span>Saved snapshots never recalculate</span></div></div>
+              <p class="persistence-inline-error" id="equipmentLoadingError" role="alert"></p>
+              <button class="button button-primary" data-action="save-equipment-loading">Save equipment weights</button>
             </section>
 
             <section class="privacy-note">

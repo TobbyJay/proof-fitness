@@ -2,6 +2,10 @@ import { LOADING_MODES } from './equipment/loadingModes.js';
 import { exercises } from './exercises/exerciseCatalog.js';
 import { programmeCatalog } from './programmes/programmeCatalog.js';
 import { estimateWorkoutDuration } from './workouts/estimateWorkoutDuration.js';
+import { DEFAULT_EQUIPMENT } from './equipment/equipmentCatalog.js';
+import { getConservativeCalibrationLoad, getNextAchievableLoad } from './loading/achievableLoads.js';
+import { calculatePlateLoading } from './equipment/plateLoading.js';
+import { isExternallyLoadedMode } from './loading/loadingSchema.js';
 
 export function validateProgrammeDomain() {
   const errors = []; const warnings = [];
@@ -10,6 +14,12 @@ export function validateProgrammeDomain() {
   for (const exercise of Object.values(exercises)) {
     if (!LOADING_MODES.includes(exercise.loadingMode)) errors.push(`${exercise.id}: invalid loading mode.`);
     for (const substituteId of exercise.substitutions) if (!exercises[substituteId]) errors.push(`${exercise.id}: unresolved substitution ${substituteId}.`);
+    if(isExternallyLoadedMode(exercise.loadingMode)) {
+      const startingLoad=getConservativeCalibrationLoad(exercise.loadingMode,DEFAULT_EQUIPMENT);
+      if(startingLoad==null||!calculatePlateLoading(startingLoad,exercise.loadingMode,DEFAULT_EQUIPMENT)) errors.push(`${exercise.id}: cannot generate valid first-exposure loading guidance.`);
+      const next=getNextAchievableLoad(startingLoad,exercise.loadingMode,DEFAULT_EQUIPMENT);
+      if(next!=null&&!calculatePlateLoading(next,exercise.loadingMode,DEFAULT_EQUIPMENT)) errors.push(`${exercise.id}: next load is not physically achievable.`);
+    }
   }
   const templateIds = Object.keys(programmeCatalog.templates);
   if (new Set(templateIds).size !== templateIds.length) errors.push('Template IDs are not unique.');

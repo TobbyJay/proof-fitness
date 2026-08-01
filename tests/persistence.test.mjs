@@ -9,6 +9,8 @@ import { getWorkoutTemplate } from '../src/domain/programmes/programmeCatalog.js
 import { DEFAULT_EQUIPMENT } from '../src/domain/equipment/equipmentCatalog.js';
 import { nextRequiredWorkout } from '../src/domain/scheduling/workoutRotation.js';
 import { localDate } from '../src/db/transactions.js';
+import Dexie from 'dexie';
+import {SCHEMA_V1,SCHEMA_V2} from '../src/db/schema.js';
 
 function fixtureName(label) { return `proof-fitness-test-${label}-${crypto.randomUUID()}`; }
 async function context(t,label) {
@@ -27,6 +29,7 @@ test('clean install creates schema metadata and no activity',async t=>{
   assert.equal(state.derived.streak,0);
   for(const collection of ['workouts','runs','mealChecks','checkIns','measurements','progression','reviews','transitions']) assert.deepEqual(state[collection],[]);
   assert.ok(state.appMeta.completedMigrations.includes(1));
+  assert.ok(state.appMeta.completedMigrations.includes(3));
 });
 
 test('partial onboarding and completed onboarding survive recreation',async t=>{
@@ -132,6 +135,22 @@ test('export/replace round trip preserves records and rejects future schemas',as
   assert.ok(restored.appMeta.onboardingCompletedAt);
   assert.equal(restored.measurements[0].value,68.5);
   await assert.rejects(()=>target.persistence.importReplace({...payload,manifest:{...payload.manifest,schemaVersion:999}}),/future schema/);
+  const invalid={...payload,equipment:payload.equipment.map(record=>({...record,barbell:{...record.barbell,weight:{weightKg:5,weightSource:'probably'}}}))};
+  await assert.rejects(()=>target.persistence.importReplace(invalid),/invalid equipment weight source/);
+});
+
+test('restore upgrades legacy tare and numeric working-load records without rewriting sessions',async t=>{
+  const source=await context(t,'legacy-import-source'); await source.persistence.completeOnboarding(onboardingInput());
+  const payload=await source.persistence.exportAll(1); payload.manifest.schemaVersion=1;
+  payload.equipment=[{...payload.equipment[0],barbell:undefined,dumbbellHandle:undefined,emptyBarbellKg:6.3,emptyDumbbellHandleKg:null,schemaVersion:1}];
+  payload.exerciseProgressionStates=[{id:'barbell-curl@1',exerciseId:'barbell-curl',exerciseVersion:1,currentWorkingLoad:10,schemaVersion:1,updatedAt:'2026-07-01T00:00:00.000Z'}];
+  const historical={id:'history-legacy',templateId:'foundation-a',templateVersion:1,workoutSnapshot:{exercises:[]},exercisesSnapshot:[],status:'completed',localDate:'2026-07-01'}; payload.workoutSessions=[historical];
+  const target=await context(t,'legacy-import-target'); await target.persistence.importReplace(payload); const restored=await hydrateState(target.db);
+  assert.deepEqual(restored.equipment.barbell.weight,{weightKg:6.3,weightSource:'estimated'});
+  assert.deepEqual(restored.equipment.dumbbellHandle.weight,{weightKgEach:null,weightSource:'unknown'});
+  assert.deepEqual(restored.equipment.collars,{count:6,weight:{weightKgEach:null,weightSource:'unknown'}});
+  assert.deepEqual(restored.progression[0].currentWorkingLoad,{loadingMode:'barbell-symmetric',plateLoadKg:10});
+  assert.deepEqual(restored.workouts[0].workoutSnapshot,historical.workoutSnapshot);
 });
 
 test('streak requires workouts on configured strength days but not rest days',()=>{
@@ -158,4 +177,35 @@ test('local calendar evidence stays correct across midnight when UTC differs',()
   for(const mealId of ['breakfast','lunch','snack','dinner']) records.mealChecks.push({localDate:'2026-08-01',mealId,status:'planned'});
   records.checkIns.push({localDate:'2026-08-01',feeling:'Good'});
   assert.equal(calculateStreak(records,afterMidnight),2);
+});
+
+test('version 1 migration preserves records and conservatively migrates known legacy mass to estimated',async t=>{
+  const name=fixtureName('migration-v1'); const legacy=new Dexie(name);
+  legacy.version(1).stores(SCHEMA_V1); await legacy.open();
+  await legacy.table('appMeta').put({id:'app',completedMigrations:[1],onboardingCompletedAt:null,updatedAt:'2026-07-01T00:00:00.000Z'});
+  await legacy.table('equipment').put({id:'equipment',plates:{...DEFAULT_EQUIPMENT.plates},emptyBarbellKg:null,emptyDumbbellHandleKg:1.2,updatedAt:'2026-07-01T00:00:00.000Z'});
+  await legacy.table('exerciseProgressionStates').put({id:'barbell-curl@1',exerciseId:'barbell-curl',exerciseVersion:1,currentWorkingLoad:10,updatedAt:'2026-07-01T00:00:00.000Z'});
+  legacy.close(); const upgraded=new ProofFitnessDatabase(name); t.after(async()=>{upgraded.close();await upgraded.delete();});
+  const state=await hydrateState(await openDatabase(upgraded));
+  assert.equal(upgraded.verno,3); assert.deepEqual(state.equipment.barbell.weight,{weightKg:null,weightSource:'unknown'});
+  assert.deepEqual(state.equipment.dumbbellHandle.weight,{weightKgEach:1.2,weightSource:'estimated'});
+  assert.deepEqual(state.equipment.collars,{count:6,weight:{weightKgEach:null,weightSource:'unknown'}});
+  assert.equal(state.progression[0].currentWorkingLoad.plateLoadKg,10); assert.ok(state.appMeta.completedMigrations.includes(2)); assert.ok(state.appMeta.completedMigrations.includes(3));
+});
+
+test('version 2 migration adds collar provenance without resetting equipment or historical snapshots',async t=>{
+  const name=fixtureName('migration-v2'); const legacy=new Dexie(name);
+  legacy.version(2).stores(SCHEMA_V2); await legacy.open();
+  await legacy.table('appMeta').put({id:'app',completedMigrations:[1,2],onboardingCompletedAt:null,updatedAt:'2026-07-01T00:00:00.000Z'});
+  await legacy.table('equipment').put({id:'equipment',plates:{...DEFAULT_EQUIPMENT.plates},barbell:{tareWeightKnown:true,tareWeightKg:5.8},dumbbellHandle:{count:2,tareWeightKnown:false,tareWeightKgEach:null},collars:6,updatedAt:'2026-07-01T00:00:00.000Z'});
+  const historicalGuidance={loadingMode:'barbell-symmetric',plateLoadKg:15,plateLoadPerSideKg:7.5,tareWeightKnown:true,tareWeightKg:5.8,totalSystemLoadKg:20.8,sides:{left:[5,2.5],right:[5,2.5]}};
+  await legacy.table('workoutSessions').put({id:'historical-v2',templateId:'foundation-a',status:'completed',localDate:'2026-07-01',workoutSnapshot:{exercises:[{exerciseId:'barbell-romanian-deadlift',loadingGuidanceSnapshot:historicalGuidance}]},updatedAt:'2026-07-01T00:00:00.000Z'});
+  legacy.close(); const upgraded=new ProofFitnessDatabase(name); t.after(async()=>{upgraded.close();await upgraded.delete();});
+  const state=await hydrateState(await openDatabase(upgraded));
+  assert.equal(upgraded.verno,3);
+  assert.deepEqual(state.equipment.barbell.weight,{weightKg:5.8,weightSource:'estimated'});
+  assert.deepEqual(state.equipment.dumbbellHandle.weight,{weightKgEach:null,weightSource:'unknown'});
+  assert.deepEqual(state.equipment.collars,{count:6,weight:{weightKgEach:null,weightSource:'unknown'}});
+  assert.equal(state.workouts[0].workoutSnapshot.exercises[0].loadingGuidanceSnapshot.totalSystemLoadKg,20.8);
+  assert.equal(state.workouts[0].workoutSnapshot.exercises[0].loadingGuidanceSnapshot.collarWeightKgEach,undefined);
 });

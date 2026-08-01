@@ -9,7 +9,6 @@ test('clean production install exposes only empty, post-bootstrap state', async 
   });
   const navigation = page.goto('/');
   await page.waitForSelector('#persistenceLoading', { state: 'visible' });
-  await expect(page.locator('#persistenceLoading')).toBeVisible();
   await navigation;
   await expect(page.locator('#onboardingLayer')).toHaveClass(/completed/);
   await expect(page.locator('#persistenceLoading')).toBeHidden();

@@ -3,7 +3,7 @@ import { completeOnboarding, installSinglePutFailure, readStore, restorePut } fr
 
 async function reachFirstWorkingSet(page) {
   await page.locator('[data-action="start-workout"]').first().click();
-  await expect(page.getByRole('heading', { name: 'Full Body A' })).toBeVisible();
+  await expect(page.locator('#workoutStage').getByRole('heading', { name: 'Full Body A' })).toBeVisible();
   await page.getByRole('button', { name: 'High' }).click();
   await page.getByRole('button', { name: 'Begin warm-up' }).click();
   for (const item of ['General movement','Dynamic mobility','Exercise rehearsal','Light warm-up set']) {
@@ -30,7 +30,7 @@ test('active workout snapshot, load, substitution, sets and rest recover', async
   await installSinglePutFailure(page, 'activeWorkoutSessions');
   await page.getByRole('button', { name: 'Save load' }).click();
   await expect(page.locator('#selectedLoadError')).toContainText('Could not save');
-  expect((await readStore(page,'activeWorkoutSessions'))[0].workoutSnapshot.exercises[0].selectedLoad).toBeNull();
+  expect((await readStore(page,'activeWorkoutSessions'))[0].workoutSnapshot.exercises[0].selectedLoad).toBe(1);
   await restorePut(page);
   await page.getByRole('button', { name: 'Save load' }).click();
   await expect(page.locator('.exercise-load')).toContainText('5 kg');

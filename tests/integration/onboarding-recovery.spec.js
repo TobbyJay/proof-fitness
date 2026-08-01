@@ -19,7 +19,8 @@ test('every onboarding checkpoint survives reload and page recreation', async ({
   await expect(page.getByRole('heading', { name: 'Make every load unambiguous.' })).toBeVisible();
 
   await page.getByRole('button', { name: /Temporarily unavailable/ }).click();
-  await page.locator('#obBar').fill('10');
+  await page.locator('#obBarSource').selectOption('estimated');
+  await page.locator('#obBarWeight').fill('10');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('heading', { name: 'Choose your coaching defaults.' })).toBeVisible();
   await page.reload();
@@ -40,7 +41,8 @@ test('every onboarding checkpoint survives reload and page recreation', async ({
   await reopened.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(reopened.getByRole('button', { name: /Chimes only/i })).toHaveClass(/selected/);
   await reopened.getByRole('button', { name: 'Back', exact: true }).click();
-  await expect(reopened.locator('#obBar')).toHaveValue('10');
+  await expect(reopened.locator('#obBarSource')).toHaveValue('estimated');
+  await expect(reopened.locator('#obBarWeight')).toHaveValue('10');
   await expect(reopened.getByRole('button', { name: /Temporarily unavailable/ })).toHaveClass(/selected/);
   await reopened.getByRole('button', { name: 'Back', exact: true }).click();
   await reopened.getByRole('button', { name: 'Back', exact: true }).click();

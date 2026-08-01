@@ -2,6 +2,12 @@
 
 ## Unreleased — Production integration audit
 
+- Replaced binary tare confidence with measured/estimated/unknown equipment mass, added separate collar count/weight, and included exactly two collars per implement (four per matched pair) in assembled-load snapshots.
+- Added the preserving IndexedDB v2 → v3 migration, conservative legacy-known → estimated conversion, enum-validated export/restore, historical mass-provenance snapshots, and mobile light/dark regression coverage.
+- Added explicit barbell/handle tare configuration with honest unknown states and a preserving IndexedDB v1 → v2 migration.
+- Added deterministic shared-inventory loading engines, cached achievable-load graphs, exact accessible plate stacks, and unambiguous total/plate/per-side labels.
+- Added conservative first-exposure calibration loads, actual rep/duration logging, immutable loading/progression snapshots, readiness/discomfort-aware double progression, regression proposals, and accept/defer/reject decisions.
+- Added exercise progression history and workout receipts backed only by persisted appearances, plus load/progression/migration unit coverage.
 - Added Playwright production integration coverage for clean install, resumable/atomic onboarding, workout and run recovery, failure retry, pull-up snapshots, Week 4 outcomes, schedule transitions, export/restore/reset, service-worker replacement, offline operation, accessibility, and five mobile viewports.
 - Fixed first-offline-reload asset caching, run-ID reuse, recovered run position, failed run-start status, dialog cancel/focus behavior, reset-to-restore reachability, and meal-status ARIA.
 - Added persisted onboarding audio preference, persisted selected workout loads and plate guidance, inline workout persistence errors, honest “Something else” meals, and real-record weight averages.

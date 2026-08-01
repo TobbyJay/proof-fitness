@@ -2,6 +2,18 @@
 
 Record device model, OS version, browser version, build/commit, tester, date, and the result of every item. Preserve a backup before destructive/update checks. A checked item means it was performed on the named physical device—not inferred from desktop automation.
 
+## Load guidance and progression on both platforms
+
+- [ ] Complete onboarding with both equipment weights set to **I don’t know**. Confirm preview and workout say `plates + bar/handle`, never `total`.
+- [ ] In Data → Equipment / Loading, enter the measured empty barbell and one-handle weights. Confirm future preview totals include tare while the exact plate stacks remain unchanged.
+- [ ] Start a first-exposure barbell, matched-dumbbell, and single-dumbbell exercise. Confirm numeric left/right or sleeve stacks are readable at 320 px and 390 px in light and dark themes.
+- [ ] Record actual reps with −/+ for every set, choose each calibration response on separate test records, close/reopen, and confirm active set evidence recovers.
+- [ ] On the next appearance, confirm Last Time contains the real load and set values and the substitute does not inherit the original exercise’s history.
+- [ ] Seed or earn two controlled top-range appearances. Confirm the next recommendation is achievable, includes an exact plate configuration, and does not change the working load before **Accept**.
+- [ ] Test **Accept**, **Defer**, and **Reject** independently. Confirm readiness can hold an earned increase, discomfort blocks it, and repeated too-heavy evidence offers a user-confirmed lower achievable load.
+- [ ] Correct a tare after completing a workout. Confirm the completed receipt retains the tare/total recorded at workout start.
+- [ ] Export, reset, restore, and compare tare values, set performances, working loads, recommendations, decisions, and historical loading snapshots.
+
 ## iPhone / iOS
 
 - [ ] Open the production HTTPS URL in Safari and use **Share → Add to Home Screen**.

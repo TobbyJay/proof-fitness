@@ -9,6 +9,7 @@ This domain is the programme source of truth. It is deliberately separate from t
 - `src/domain/exercises/` owns exercise identity, instructions, safety, substitutions, and pull-up rungs.
 - `src/domain/programmes/` owns workout templates, template sets, the programme catalog, and pure transitions.
 - `src/domain/progression/` owns calibration evidence and conservative exercise-specific recommendations.
+- `src/domain/loading/` owns plate inventory, deterministic combinations, achievable-load graphs, tare-aware guidance, and display terminology.
 - `src/domain/reviews/` owns the deterministic Foundation readiness review.
 - `src/domain/scheduling/` owns schedule modes and completion-ordered rotation.
 - `src/domain/workouts/` validates templates, estimates duration, and creates immutable execution snapshots.
@@ -26,7 +27,7 @@ The authoritative catalogs are `exerciseCatalog` and `programmeCatalog`. All tem
 
 Supported loading modes are `barbell-symmetric`, `two-dumbbells-matched`, `single-dumbbell`, `bodyweight`, `bodyweight-assisted`, `timed-bodyweight`, and `pull-up-progression`.
 
-The default equipment snapshot contains six 0.5 kg plates, six 1.25 kg plates, four 2.5 kg plates, four 5 kg plates, two spin-lock dumbbell handles, one 152 cm two-piece spin-lock barbell, six collars, and 40.5 kg removable load. The plate service rejects configurations that cannot be assembled symmetrically from that inventory. Empty implement weights remain nullable instead of being guessed.
+The default equipment snapshot contains six 0.5 kg plates, six 1.25 kg plates, four 2.5 kg plates, four 5 kg plates, two spin-lock dumbbell handles, one 152 cm two-piece spin-lock barbell, six collars, and 40.5 kg removable load. The plate service rejects configurations that cannot be assembled symmetrically from that shared inventory. Bar, handle, and collar masses use explicit `measured`, `estimated`, or `unknown` provenance; generic defaults remain unknown. See `LOAD_GUIDANCE.md` for the calculation and assembly contracts.
 
 The barbell is used for Romanian and conventional deadlifts, floor press, bent-over row, glute bridge, and barbell curl: bilateral compound strength, posterior-chain loading, horizontal push/pull, glute strength, and direct biceps work.
 
@@ -83,7 +84,7 @@ Calibration and performance evidence are maps keyed by exercise ID. Barbell row 
 
 ## Workout snapshots and duration
 
-`createWorkoutSnapshot` resolves the current template, equipment, pull-up condition/rung, and substitutions into a deeply frozen record. It contains programme/template IDs and versions, phase, schedule mode, creation time, equipment and pull-up snapshots, and all exercise execution guidance. Later catalog, equipment, schedule, or programme changes cannot rewrite it. An in-workout substitution produces a new frozen resolved snapshot while retaining the superseded snapshot unchanged.
+`createWorkoutSnapshot` resolves the current template, equipment, pull-up condition/rung, substitutions, selected canonical plate load, exact loading guidance, and progression context into a deeply frozen record. It contains programme/template IDs and versions, phase, schedule mode, creation time, equipment and pull-up snapshots, and all exercise execution guidance. Later catalog, equipment, tare, schedule, or programme changes cannot rewrite it. An in-workout substitution produces a new frozen resolved snapshot while retaining the superseded snapshot unchanged.
 
 The duration estimator uses working sets, exercise-specific set duration, unilateral work, rest, transitions, and preparation/setup. Required templates validate inside a documented 40–55 minute tolerance around the normal 45–50 minute target. Optional within-workout work is excluded from required-completion duration.
 

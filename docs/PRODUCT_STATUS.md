@@ -12,7 +12,7 @@ Physical installed-PWA testing on iPhone and Android is still required. Proof Fi
 
 Proof Fitness now uses Dexie over IndexedDB for account-free, backend-free local persistence. First render waits for database migration and hydration. A database failure opens recovery controls rather than appearing to be a new installation.
 
-Durable flows include partial/completed onboarding, programme state and A/B/C or Lean Athletic rotations, Week 4 reviews and user decisions, programme transitions, pull-up equipment safety, immutable active workout snapshots, completed/partial workouts, runs and audio position, meals, check-ins, measurements, exercise progression, export/restore, and reset.
+Durable flows include partial/completed onboarding, explicit known/unknown implement tare weights, programme state and A/B/C or Lean Athletic rotations, Week 4 reviews and user decisions, programme transitions, pull-up equipment safety, immutable loading-aware active workout snapshots, completed/partial workouts with actual set evidence, runs and audio position, meals, check-ins, measurements, exercise progression recommendations and decisions, export/restore, and reset.
 
 Fresh installations contain no completed activity, measurements, history, reviews, progression evidence, or non-zero streak. Planned programme and meal content remains visible without being recorded as completed.
 
@@ -27,7 +27,7 @@ Programme domain v1 remains the single source of truth. It includes 44 versioned
 - Background audio and wake lock support vary across platforms.
 - Notifications and cross-device synchronization are not implemented.
 - Physical installed-PWA behavior, OS lock-screen audio/media controls, cold offline launch, and real update prompts remain device-acceptance work.
-- Measurement edit/delete controls and a general progression-recommendation decision UI are not currently exposed.
+- Measurement edit/delete controls are not currently exposed.
 
 ## Non-goals
 
